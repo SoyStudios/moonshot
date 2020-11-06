@@ -20,6 +20,8 @@ func runMain() int {
 	)
 	g := &Game{
 		scale: 1,
+
+		p: &Player{},
 	}
 
 	if err := ebiten.RunGame(g); err != nil {
