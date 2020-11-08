@@ -6,12 +6,13 @@ type (
 	stack []int16
 
 	Machine struct {
+		run func(*Machine, []int16, func())
+
 		pc int // program counter
 		i  int // instruction counter
 
 		program   Program
 		stack     stack
-		callStack stack
 		registers [16]int16
 
 		state State
@@ -45,21 +46,21 @@ var (
 	}
 )
 
-func (s stack) Push(v int16) {
-	s = append(s, v)
+func (s *stack) Push(v int16) {
+	*s = append(*s, v)
 }
 
-func (s stack) Pop() int16 {
-	n := len(s) - 1
-	ret := s[n]
-	s = s[:n]
+func (s *stack) Pop() int16 {
+	n := len(*s) - 1
+	ret := (*s)[n]
+	*s = (*s)[:n]
 	return ret
 }
 
 func NewMachine() *Machine {
 	m := &Machine{
-		callStack: stackPool.Get().(stack)[:0],
-		stack:     stackPool.Get().(stack)[:0],
+		run:   runInstruction,
+		stack: stackPool.Get().(stack)[:0],
 	}
 	return m
 }
@@ -71,4 +72,14 @@ func (m *Machine) Run() {
 	}
 	inst := Translate(Token(m.program.Evaluate[m.pc]))
 	inst.Run(m, m.program.Evaluate)
+	if len(m.stack) <= 0 {
+		return
+	}
+	if m.stack.Pop() < 1 {
+		return
+	}
+	m.pc = 0
+	m.stack = m.stack[:0]
+	inst = Translate(Token(m.program.Execute[m.pc]))
+	inst.Run(m, m.program.Execute)
 }
