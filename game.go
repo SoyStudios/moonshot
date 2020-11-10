@@ -4,9 +4,14 @@ import "github.com/hajimehoshi/ebiten/v2"
 
 type (
 	Game struct {
-		scale float64
+		viewport struct {
+			scale float64
+			x, y  float64
+		}
 
-		p *Player
+		// width, height
+		w, h int
+		p    *Player
 	}
 )
 
@@ -15,9 +20,9 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.p.Draw(screen)
 }
 
 func (g *Game) Layout(w, h int) (screenWidth, screenHeight int) {
+	g.w, g.h = w, h
 	return w, h
 }

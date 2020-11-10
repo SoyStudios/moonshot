@@ -18,11 +18,10 @@ func runMain() int {
 		"level", "error",
 		"caller", log.DefaultCaller,
 	)
-	g := &Game{
-		scale: 1,
-
-		p: &Player{},
-	}
+	ebiten.SetFullscreen(true)
+	g := &Game{p: &Player{}}
+	g.viewport.scale = 1
+	g.viewport.x, g.viewport.y = 0, 0
 
 	if err := ebiten.RunGame(g); err != nil {
 		// nolint: errcheck
