@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/go-kit/kit/log"
-	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/pkg/errors"
 	"golang.org/x/image/math/f64"
 )
