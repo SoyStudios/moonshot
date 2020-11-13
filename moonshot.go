@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/jakecoffman/cp"
 	"github.com/pkg/errors"
 	"golang.org/x/image/math/f64"
 )
@@ -32,6 +33,9 @@ func runMain() int {
 		},
 		zoomFactor: 1,
 	}
+	g.space = cp.NewSpace()
+	g.space.Iterations = 1
+	g.space.UseSpatialHash(2.0, 10000)
 
 	var err error
 	g.assets, err = loadAssets()
@@ -42,6 +46,8 @@ func runMain() int {
 		)
 		return 1
 	}
+
+	g.init()
 
 	if err := ebiten.RunGame(g); err != nil {
 		// nolint: errcheck
