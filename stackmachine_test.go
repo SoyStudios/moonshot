@@ -20,11 +20,6 @@ func (s *StateMock) Y() int16 {
 	return args.Get(0).(int16)
 }
 
-func (s *StateMock) Angle() int16 {
-	args := s.Called()
-	return args.Get(0).(int16)
-}
-
 func (s *StateMock) Energy() int16 {
 	args := s.Called()
 	return args.Get(0).(int16)
@@ -49,8 +44,8 @@ func (s *StateMock) Thrust(a int16) {
 	s.Called(a)
 }
 
-func (s *StateMock) Turn(a int16) {
-	s.Called(a)
+func (s *StateMock) Turn(x, y int16) {
+	s.Called(x, y)
 }
 
 func (s *StateMock) Mine(a int16) {

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -94,9 +95,133 @@ func (s *Scanner) scanIdent() (tok Token, lit string) {
 	}
 
 	switch strings.ToUpper(buf.String()) {
+	case "BEGIN":
+		return BEGIN, buf.String()
+	case "EV":
+		return EV, buf.String()
+	case "EX":
+		return EX, buf.String()
+	case "END":
+		return END, buf.String()
+
 	case "RDX":
 		return RDX, buf.String()
+	case "RDY":
+		return RDY, buf.String()
+	case "RDE":
+		return RDE, buf.String()
+
+	case "PSH":
+		return PSH, buf.String()
+	case "POP":
+		return POP, buf.String()
+
+	case "CON":
+		return CON, buf.String()
+	case "REG":
+		return REG, buf.String()
+
+	case "GEQ":
+		return GEQ, buf.String()
+	case "LEQ":
+		return LEQ, buf.String()
+	case "IEQ":
+		return IEQ, buf.String()
+	case "GRT":
+		return GRT, buf.String()
+	case "LST":
+		return LST, buf.String()
+
+	case "NOT":
+		return NOT, buf.String()
+	case "AND":
+		return AND, buf.String()
+	case "IOR":
+		return IOR, buf.String()
+	case "XOR":
+		return XOR, buf.String()
+	case "ADD":
+		return ADD, buf.String()
+	case "SUB":
+		return SUB, buf.String()
+	case "MUL":
+		return MUL, buf.String()
+	case "DIV":
+		return DIV, buf.String()
+	case "NEG":
+		return NEG, buf.String()
+
+	case "RID":
+		return RID, buf.String()
+	case "SCN":
+		return SCN, buf.String()
+	case "THR":
+		return THR, buf.String()
+	case "TRN":
+		return TRN, buf.String()
+	case "MNE":
+		return MNE, buf.String()
+	case "REP":
+		return REP, buf.String()
+
 	default:
 		return CONST, buf.String()
 	}
+}
+
+type Parser struct {
+	s   *Scanner
+	buf struct {
+		tok Token
+		lit string
+		n   int
+	}
+}
+
+func NewParser(r io.Reader) *Parser {
+	return &Parser{s: NewScanner(r)}
+}
+
+func (p *Parser) scan() (tok Token, lit string) {
+	if p.buf.n != 0 {
+		p.buf.n = 0
+		return p.buf.tok, p.buf.lit
+	}
+
+	tok, lit = p.s.Scan()
+	p.buf.tok, p.buf.lit = tok, lit
+	return
+}
+func (p *Parser) unscan() { p.buf.n = 1 }
+func (p *Parser) scanIgnoreWhitespace() (tok Token, lit string) {
+	tok, lit = p.scan()
+	if tok == WS {
+		tok, lit = p.scan()
+	}
+	return
+}
+
+func (p *Parser) Parse() (*Program, error) {
+
+	// begin evaluate
+	if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
+		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
+	}
+	if tok, lit := p.scanIgnoreWhitespace(); tok != EV {
+		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting evaluation section", tok, lit)
+	}
+	pr := &Program{Evaluate: make([]int16, 0), Execute: make([]int16, 0)}
+	for {
+		tok, _ := p.scanIgnoreWhitespace()
+		if tok == END {
+			break
+		}
+		inst := Translate(tok)
+		s.unscan()
+		err := inst.Parse(p, &pr.Evaluate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return pr, nil
 }

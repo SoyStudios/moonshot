@@ -26,13 +26,12 @@ type (
 	State interface {
 		X() int16
 		Y() int16
-		Angle() int16
 		Energy() int16
 		ID() int16
 		RemoteID(int16) int16
 		Scan(int16) int16
 		Thrust(int16)
-		Turn(int16)
+		Turn(int16, int16)
 		Mine(int16)
 		Reproduce(int16)
 	}
