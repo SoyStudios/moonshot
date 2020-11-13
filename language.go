@@ -1,13 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/pkg/errors"
+)
 
 const (
 	ILLEGAL Token = 0
 	EOF           = 1
 	WS            = 2
 
-	CONST = 3 // constant literal
+	LITERAL = 3 // constant literal
 
 	BEGIN = 4 // begin section statement
 	EV    = 5 // evaluation section
@@ -56,12 +61,15 @@ type (
 	Instruction interface {
 		Int() int16
 		Run(*Machine, []int16)
-		Parse(*Parser, []int16)
+		Parse(*Parser, *[]int16) error
 	}
 )
 
 func Translate(token Token) Instruction {
 	switch token {
+	case LITERAL:
+		return Literal(LITERAL)
+
 	case RDX:
 		return ReadX(RDX)
 	case RDY:
@@ -136,8 +144,9 @@ func (t Token) String() string {
 	case WS:
 		return "WS"
 
-	case CONST:
-		return "CONST"
+	case LITERAL:
+		return "LITERAL"
+
 	case BEGIN:
 		return "BEGIN"
 	case EV:
@@ -269,7 +278,7 @@ func (i Illegal) Int() int16 {
 	return int16(i)
 }
 func (i Illegal) Run(_ *Machine, _ []int16) {}
-func (i Illegal) Parse(p *Parser, pr *Program) error {
+func (i Illegal) Parse(p *Parser, pr *[]int16) error {
 	p.unscan()
 	tok, lit := p.scanIgnoreWhitespace()
 	return fmt.Errorf("cannot parse illegal token %s (\"%s\")", tok, lit)
@@ -286,7 +295,7 @@ func (e ReadX) Run(m *Machine, code []int16) {
 	})
 }
 func (e ReadX) Parse(p *Parser, program *[]int16) error {
-	*program = append(program, e.Int())
+	*program = append(*program, e.Int())
 	return nil
 }
 
@@ -301,7 +310,7 @@ func (e ReadY) Run(m *Machine, code []int16) {
 	})
 }
 func (e ReadY) Parse(p *Parser, program *[]int16) error {
-	*program = append(program, e.Int())
+	*program = append(*program, e.Int())
 	return nil
 }
 
@@ -310,11 +319,14 @@ type ReadEnergy int16
 func (e ReadEnergy) Int() int16 {
 	return int16(e)
 }
-
 func (e ReadEnergy) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		m.stack.Push(m.state.Energy())
 	})
+}
+func (e ReadEnergy) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
 }
 
 type Push int16
@@ -345,11 +357,12 @@ func (e Push) Run(m *Machine, code []int16) {
 	})
 }
 func (e Push) Parse(p *Parser, program *[]int16) error {
-	*program = append(program, e.Int())
+	*program = append(*program, e.Int())
 	tok, lit := p.scanIgnoreWhitespace()
 	if tok != CON && tok != REG {
 		return fmt.Errorf("unexpected token %s (\"%s\") for PSH", tok, lit)
 	}
+	p.unscan()
 	return nil
 }
 
@@ -358,7 +371,6 @@ type Pop int16
 func (e Pop) Int() int16 {
 	return int16(e)
 }
-
 func (e Pop) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if m.pc+2 > len(code)-1 {
@@ -384,6 +396,32 @@ func (e Pop) Run(m *Machine, code []int16) {
 		}
 	})
 }
+func (e Pop) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	tok, lit := p.scanIgnoreWhitespace()
+	if tok != REG {
+		return fmt.Errorf("unexpected token %s (\"%s\") for POP", tok, lit)
+	}
+	p.unscan()
+	return nil
+}
+
+type Literal int16
+
+func (e Literal) Int() int16 {
+	return int16(e)
+}
+func (e Literal) Run(m *Machine, code []int16) {}
+func (e Literal) Parse(p *Parser, program *[]int16) error {
+	p.unscan()
+	_, lit := p.scanIgnoreWhitespace()
+	val, err := strconv.ParseInt(lit, 10, 16)
+	if err != nil {
+		return errors.Wrap(err, "invalid literal")
+	}
+	*program = append(*program, int16(val))
+	return nil
+}
 
 type Constant int16
 
@@ -391,6 +429,15 @@ func (e Constant) Int() int16 {
 	return int16(e)
 }
 func (e Constant) Run(m *Machine, code []int16) {}
+func (e Constant) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	tok, lit := p.scanIgnoreWhitespace()
+	if tok != LITERAL {
+		return fmt.Errorf("unexpected token %s (\"%s\") expecting CONST", tok, lit)
+	}
+	p.unscan()
+	return nil
+}
 
 type Register int16
 
@@ -398,6 +445,15 @@ func (e Register) Int() int16 {
 	return int16(e)
 }
 func (e Register) Run(m *Machine, code []int16) {}
+func (e Register) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	tok, lit := p.scanIgnoreWhitespace()
+	if tok != LITERAL {
+		return fmt.Errorf("unexpected token %s (\"%s\") expecting CONST", tok, lit)
+	}
+	p.unscan()
+	return nil
+}
 
 type GreaterEqual int16
 
@@ -418,13 +474,16 @@ func (e GreaterEqual) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e GreaterEqual) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type LessEqual int16
 
 func (e LessEqual) Int() int16 {
 	return int16(e)
 }
-
 func (e LessEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -439,13 +498,16 @@ func (e LessEqual) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e LessEqual) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type IsEqual int16
 
 func (e IsEqual) Int() int16 {
 	return int16(e)
 }
-
 func (e IsEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -460,13 +522,16 @@ func (e IsEqual) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e IsEqual) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type GreaterThan int16
 
 func (e GreaterThan) Int() int16 {
 	return int16(e)
 }
-
 func (e GreaterThan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -481,13 +546,16 @@ func (e GreaterThan) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e GreaterThan) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type LessThan int16
 
 func (e LessThan) Int() int16 {
 	return int16(e)
 }
-
 func (e LessThan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -502,13 +570,16 @@ func (e LessThan) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e LessThan) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Not int16
 
 func (e Not) Int() int16 {
 	return int16(e)
 }
-
 func (e Not) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 0 {
@@ -523,13 +594,16 @@ func (e Not) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e Not) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type And int16
 
 func (e And) Int() int16 {
 	return int16(e)
 }
-
 func (e And) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -540,13 +614,16 @@ func (e And) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e And) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Or int16
 
 func (e Or) Int() int16 {
 	return int16(e)
 }
-
 func (e Or) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -557,13 +634,16 @@ func (e Or) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e Or) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Xor int16
 
 func (e Xor) Int() int16 {
 	return int16(e)
 }
-
 func (e Xor) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -574,13 +654,16 @@ func (e Xor) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e Xor) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Add int16
 
 func (e Add) Int() int16 {
 	return int16(e)
 }
-
 func (e Add) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -591,13 +674,16 @@ func (e Add) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e Add) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Sub int16
 
 func (e Sub) Int() int16 {
 	return int16(e)
 }
-
 func (e Sub) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -608,13 +694,16 @@ func (e Sub) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e Sub) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Mul int16
 
 func (e Mul) Int() int16 {
 	return int16(e)
 }
-
 func (e Mul) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -625,13 +714,16 @@ func (e Mul) Run(m *Machine, code []int16) {
 		m.pc += 2
 	})
 }
+func (e Mul) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Div int16
 
 func (e Div) Int() int16 {
 	return int16(e)
 }
-
 func (e Div) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 1 {
@@ -644,6 +736,10 @@ func (e Div) Run(m *Machine, code []int16) {
 		m.stack.Push(a / b)
 		m.pc += 2
 	})
+}
+func (e Div) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
 }
 
 type Neg int16
@@ -661,6 +757,10 @@ func (n Neg) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e Neg) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type RemoteID int16
 
@@ -677,13 +777,16 @@ func (e RemoteID) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e RemoteID) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Scan int16
 
 func (e Scan) Int() int16 {
 	return int16(e)
 }
-
 func (e Scan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 0 {
@@ -694,13 +797,16 @@ func (e Scan) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e Scan) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Thrust int16
 
 func (e Thrust) Int() int16 {
 	return int16(e)
 }
-
 func (e Thrust) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 0 {
@@ -711,13 +817,16 @@ func (e Thrust) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e Thrust) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Turn int16
 
 func (e Turn) Int() int16 {
 	return int16(e)
 }
-
 func (e Turn) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 0 {
@@ -728,13 +837,16 @@ func (e Turn) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e Turn) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Mine int16
 
 func (e Mine) Int() int16 {
 	return int16(e)
 }
-
 func (e Mine) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 0 {
@@ -745,13 +857,16 @@ func (e Mine) Run(m *Machine, code []int16) {
 		m.pc++
 	})
 }
+func (e Mine) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
 
 type Reproduce int16
 
 func (e Reproduce) Int() int16 {
 	return int16(e)
 }
-
 func (e Reproduce) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(m.stack) <= 0 {
@@ -761,4 +876,8 @@ func (e Reproduce) Run(m *Machine, code []int16) {
 		m.state.Reproduce(a)
 		m.pc++
 	})
+}
+func (e Reproduce) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
 }

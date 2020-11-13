@@ -165,7 +165,7 @@ func (s *Scanner) scanIdent() (tok Token, lit string) {
 		return REP, buf.String()
 
 	default:
-		return CONST, buf.String()
+		return LITERAL, buf.String()
 	}
 }
 
@@ -217,7 +217,7 @@ func (p *Parser) Parse() (*Program, error) {
 			break
 		}
 		inst := Translate(tok)
-		s.unscan()
+		p.unscan()
 		err := inst.Parse(p, &pr.Evaluate)
 		if err != nil {
 			return nil, err
