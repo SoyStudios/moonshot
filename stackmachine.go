@@ -11,7 +11,7 @@ type (
 		pc int // program counter
 		i  int // instruction counter
 
-		program   Program
+		program   *Program
 		stack     stack
 		registers [16]int16
 
@@ -29,7 +29,7 @@ type (
 		Energy() int16
 		ID() int16
 		RemoteID(int16) int16
-		Scan(int16) int16
+		Scan(int16, int16) (int16, int16)
 		Thrust(int16)
 		Turn(int16, int16)
 		Mine(int16)

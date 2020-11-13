@@ -48,7 +48,7 @@ func (s *Scanner) Scan() (tok Token, lit string) {
 	if isWhitespace(ch) {
 		s.unread()
 		return s.scanWhitespace()
-	} else if isLetter(ch) {
+	} else if isLetter(ch) || isDigit(ch) {
 		s.unread()
 		return s.scanIdent()
 	}
@@ -202,6 +202,7 @@ func (p *Parser) scanIgnoreWhitespace() (tok Token, lit string) {
 }
 
 func (p *Parser) Parse() (*Program, error) {
+	pr := &Program{Evaluate: make([]int16, 0), Execute: make([]int16, 0)}
 
 	// begin evaluate
 	if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
@@ -210,15 +211,32 @@ func (p *Parser) Parse() (*Program, error) {
 	if tok, lit := p.scanIgnoreWhitespace(); tok != EV {
 		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting evaluation section", tok, lit)
 	}
-	pr := &Program{Evaluate: make([]int16, 0), Execute: make([]int16, 0)}
 	for {
 		tok, _ := p.scanIgnoreWhitespace()
 		if tok == END {
 			break
 		}
 		inst := Translate(tok)
-		p.unscan()
 		err := inst.Parse(p, &pr.Evaluate)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// begin execute
+	if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
+		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
+	}
+	if tok, lit := p.scanIgnoreWhitespace(); tok != EX {
+		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting execution section", tok, lit)
+	}
+	for {
+		tok, _ := p.scanIgnoreWhitespace()
+		if tok == END {
+			break
+		}
+		inst := Translate(tok)
+		err := inst.Parse(p, &pr.Execute)
 		if err != nil {
 			return nil, err
 		}

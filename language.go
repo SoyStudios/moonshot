@@ -241,9 +241,6 @@ func TranslateProgram(tks []Token) []int16 {
 }
 
 func runInstruction(m *Machine, code []int16, f func()) {
-	if m.pc > len(code)+1 {
-		return
-	}
 	m.pc++
 	f()
 	if m.pc > len(code)-1 {
@@ -254,9 +251,6 @@ func runInstruction(m *Machine, code []int16, f func()) {
 }
 
 func runInstructionDebug(m *Machine, code []int16, f func()) {
-	if m.pc > len(code)+1 {
-		return
-	}
 
 	fmt.Printf("%v\n", code)
 	fmt.Println("pc", m.pc)
@@ -267,7 +261,10 @@ func runInstructionDebug(m *Machine, code []int16, f func()) {
 	if m.pc > len(code)-1 {
 		return
 	}
-	inst := Translate(Token(code[m.pc]))
+	tok := Token(code[m.pc])
+	fmt.Printf("%s\n", tok)
+
+	inst := Translate(tok)
 	inst.Run(m, code)
 }
 
@@ -471,7 +468,6 @@ func (e GreaterEqual) Run(m *Machine, code []int16) {
 		} else {
 			m.stack.Push(0)
 		}
-		m.pc += 2
 	})
 }
 func (e GreaterEqual) Parse(p *Parser, program *[]int16) error {
@@ -495,7 +491,6 @@ func (e LessEqual) Run(m *Machine, code []int16) {
 		} else {
 			m.stack.Push(0)
 		}
-		m.pc += 2
 	})
 }
 func (e LessEqual) Parse(p *Parser, program *[]int16) error {
@@ -519,7 +514,6 @@ func (e IsEqual) Run(m *Machine, code []int16) {
 		} else {
 			m.stack.Push(0)
 		}
-		m.pc += 2
 	})
 }
 func (e IsEqual) Parse(p *Parser, program *[]int16) error {
@@ -543,7 +537,6 @@ func (e GreaterThan) Run(m *Machine, code []int16) {
 		} else {
 			m.stack.Push(0)
 		}
-		m.pc += 2
 	})
 }
 func (e GreaterThan) Parse(p *Parser, program *[]int16) error {
@@ -567,7 +560,6 @@ func (e LessThan) Run(m *Machine, code []int16) {
 		} else {
 			m.stack.Push(0)
 		}
-		m.pc += 2
 	})
 }
 func (e LessThan) Parse(p *Parser, program *[]int16) error {
@@ -591,7 +583,6 @@ func (e Not) Run(m *Machine, code []int16) {
 		} else if a == 1 {
 			m.stack.Push(0)
 		}
-		m.pc++
 	})
 }
 func (e Not) Parse(p *Parser, program *[]int16) error {
@@ -611,7 +602,6 @@ func (e And) Run(m *Machine, code []int16) {
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
 		m.stack.Push(a & b)
-		m.pc += 2
 	})
 }
 func (e And) Parse(p *Parser, program *[]int16) error {
@@ -631,7 +621,6 @@ func (e Or) Run(m *Machine, code []int16) {
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
 		m.stack.Push(a | b)
-		m.pc += 2
 	})
 }
 func (e Or) Parse(p *Parser, program *[]int16) error {
@@ -651,7 +640,6 @@ func (e Xor) Run(m *Machine, code []int16) {
 		}
 		a, b := m.stack.Pop(), m.stack.Pop()
 		m.stack.Push(a ^ b)
-		m.pc += 2
 	})
 }
 func (e Xor) Parse(p *Parser, program *[]int16) error {
@@ -671,7 +659,6 @@ func (e Add) Run(m *Machine, code []int16) {
 		}
 		a, b := m.stack.Pop(), m.stack.Pop()
 		m.stack.Push(a + b)
-		m.pc += 2
 	})
 }
 func (e Add) Parse(p *Parser, program *[]int16) error {
@@ -691,7 +678,6 @@ func (e Sub) Run(m *Machine, code []int16) {
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
 		m.stack.Push(a - b)
-		m.pc += 2
 	})
 }
 func (e Sub) Parse(p *Parser, program *[]int16) error {
@@ -711,7 +697,6 @@ func (e Mul) Run(m *Machine, code []int16) {
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
 		m.stack.Push(a * b)
-		m.pc += 2
 	})
 }
 func (e Mul) Parse(p *Parser, program *[]int16) error {
@@ -734,7 +719,6 @@ func (e Div) Run(m *Machine, code []int16) {
 			return
 		}
 		m.stack.Push(a / b)
-		m.pc += 2
 	})
 }
 func (e Div) Parse(p *Parser, program *[]int16) error {
@@ -754,7 +738,6 @@ func (n Neg) Run(m *Machine, code []int16) {
 		}
 		a := m.stack.Pop()
 		m.stack.Push(a * -1)
-		m.pc++
 	})
 }
 func (e Neg) Parse(p *Parser, program *[]int16) error {
@@ -774,7 +757,6 @@ func (e RemoteID) Run(m *Machine, code []int16) {
 		}
 		a := m.stack.Pop()
 		m.stack.Push(m.state.RemoteID(a))
-		m.pc++
 	})
 }
 func (e RemoteID) Parse(p *Parser, program *[]int16) error {
@@ -789,12 +771,13 @@ func (e Scan) Int() int16 {
 }
 func (e Scan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(m.stack) <= 1 {
 			return
 		}
-		a := m.stack.Pop()
-		m.stack.Push(m.state.Scan(a))
-		m.pc++
+		y, x := m.stack.Pop(), m.stack.Pop()
+		x, y = m.state.Scan(x, y)
+		m.stack.Push(x)
+		m.stack.Push(y)
 	})
 }
 func (e Scan) Parse(p *Parser, program *[]int16) error {
@@ -814,7 +797,6 @@ func (e Thrust) Run(m *Machine, code []int16) {
 		}
 		a := m.stack.Pop()
 		m.state.Thrust(a)
-		m.pc++
 	})
 }
 func (e Thrust) Parse(p *Parser, program *[]int16) error {
@@ -834,7 +816,6 @@ func (e Turn) Run(m *Machine, code []int16) {
 		}
 		x, y := m.stack.Pop(), m.stack.Pop()
 		m.state.Turn(x, y)
-		m.pc++
 	})
 }
 func (e Turn) Parse(p *Parser, program *[]int16) error {
@@ -854,7 +835,6 @@ func (e Mine) Run(m *Machine, code []int16) {
 		}
 		a := m.stack.Pop()
 		m.state.Mine(a)
-		m.pc++
 	})
 }
 func (e Mine) Parse(p *Parser, program *[]int16) error {
@@ -874,7 +854,6 @@ func (e Reproduce) Run(m *Machine, code []int16) {
 		}
 		a := m.stack.Pop()
 		m.state.Reproduce(a)
-		m.pc++
 	})
 }
 func (e Reproduce) Parse(p *Parser, program *[]int16) error {
