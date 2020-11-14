@@ -56,9 +56,30 @@ func (s *Scanner) Scan() (tok Token, lit string) {
 	switch ch {
 	case eof:
 		return EOF, ""
+	case '/':
+		return s.scanComment()
 	default:
 		return ILLEGAL, string(ch)
 	}
+}
+
+func (s *Scanner) scanComment() (tok Token, lit string) {
+	var buf bytes.Buffer
+	buf.WriteRune(s.read())
+
+	for {
+		if ch := s.read(); ch == eof {
+			break
+		} else if ch == '\n' {
+			s.unread()
+			break
+		} else {
+			buf.WriteRune(ch)
+		}
+	}
+	s.scanWhitespace()
+
+	return COMMENT, buf.String()
 }
 
 func (s *Scanner) scanWhitespace() (tok Token, lit string) {
@@ -216,6 +237,9 @@ func (p *Parser) Parse() (*Program, error) {
 		if tok == END {
 			break
 		}
+		if tok == COMMENT {
+			continue
+		}
 		inst := Translate(tok)
 		err := inst.Parse(p, &pr.Evaluate)
 		if err != nil {
@@ -234,6 +258,9 @@ func (p *Parser) Parse() (*Program, error) {
 		tok, _ := p.scanIgnoreWhitespace()
 		if tok == END {
 			break
+		}
+		if tok == COMMENT {
+			continue
 		}
 		inst := Translate(tok)
 		err := inst.Parse(p, &pr.Execute)

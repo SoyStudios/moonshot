@@ -64,8 +64,14 @@ func NewMachine() *Machine {
 	return m
 }
 
+func (m *Machine) Destroy() {
+	stackPool.Put(m.stack)
+	m.stack = nil
+}
+
 func (m *Machine) Run() {
 	m.pc = 0
+	m.stack = m.stack[:0]
 	if len(m.program.Evaluate) == 0 {
 		return
 	}

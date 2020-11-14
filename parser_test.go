@@ -10,6 +10,7 @@ import (
 func TestSimpleParser(t *testing.T) {
 	code := `
 BEGIN EV
+	// if energy >= 5 and y >= 5
 	PSH CON 5
 	RDE
 	GEQ
@@ -19,6 +20,7 @@ BEGIN EV
 	AND
 END
 BEGIN EX
+	// push 1, 2
 	PSH CON 1
 	PSH CON 2
 	SCN
@@ -53,6 +55,9 @@ END
 		return
 	}
 	if !assert.Equal(t, int16(16&17), m.stack[0]) {
+		return
+	}
+	if !assert.Equal(t, int16(16), m.registers[0]) {
 		return
 	}
 }

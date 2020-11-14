@@ -11,48 +11,49 @@ const (
 	ILLEGAL Token = 0
 	EOF           = 1
 	WS            = 2
+	COMMENT       = 3
 
-	LITERAL = 3 // constant literal
+	LITERAL = 8 // constant literal
 
-	BEGIN = 4 // begin section statement
-	EV    = 5 // evaluation section
-	EX    = 6 // execution section
-	END   = 7 // end section statement
+	BEGIN = 16 // begin section statement
+	EV    = 17 // evaluation section
+	EX    = 18 // execution section
+	END   = 19 // end section statement
 
-	RDX = 16 // Read X vector and push it on the stack
-	RDY = 17 // Read Y vector and push it on the stack
-	RDE = 18 // Read total energy and push it on the stack
+	RDX = 32 // Read X vector and push it on the stack
+	RDY = 33 // Read Y vector and push it on the stack
+	RDE = 34 // Read total energy and push it on the stack
 
-	PSH = 32 // Push
-	POP = 33 // Pop
+	PSH = 64 // Push
+	POP = 65 // Pop
 
-	CON = 64 // Constant identifier
-	REG = 65 // Register identifier
+	CON = 128 // Constant identifier
+	REG = 129 // Register identifier
 
 	// comparison
 	// x COMP y, where x was pushed before y
-	GEQ = 128 // Pushes 1 if x >= y, else 0
-	LEQ = 129 // Pushes 1 if x <= y, else 0
-	IEQ = 130 // Pushes 1 if x == y, else 0
-	GRT = 131 // Pushes 1 if x > y, else 0
-	LST = 132 // Pushes 1 if x < y, else 0
+	GEQ = 256 // Pushes 1 if x >= y, else 0
+	LEQ = 257 // Pushes 1 if x <= y, else 0
+	IEQ = 258 // Pushes 1 if x == y, else 0
+	GRT = 259 // Pushes 1 if x > y, else 0
+	LST = 260 // Pushes 1 if x < y, else 0
 
-	NOT = 256 // Pushes !x
-	AND = 257 // Pushes x & y
-	IOR = 258 // Pushes x | y
-	XOR = 259 // Pushes x ^ y
-	ADD = 260 // Pushes x + y
-	SUB = 261 // Pushes x - y
-	MUL = 262 // Pushes x * y
-	DIV = 263 // Pushes x / y, nop if y == 0
-	NEG = 264 // Pushes -x
+	NOT = 512 // Pushes !x
+	AND = 513 // Pushes x & y
+	IOR = 514 // Pushes x | y
+	XOR = 515 // Pushes x ^ y
+	ADD = 516 // Pushes x + y
+	SUB = 517 // Pushes x - y
+	MUL = 518 // Pushes x * y
+	DIV = 519 // Pushes x / y, nop if y == 0
+	NEG = 520 // Pushes -x
 
-	RID = 512 // Pushes the ID of the first object in current fov
-	SCN = 513 // Pop x, y and pushes x, y to first object in current fov
-	THR = 514 // Pop and thrust for x units
-	TRN = 515 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
-	MNE = 516 // Pop and mine with strength x
-	REP = 517 // Pop and reproduce using x energy
+	RID = 1024 // Pushes the ID of the first object in current fov
+	SCN = 1025 // Pop x, y and pushes x, y to first object in current fov
+	THR = 1026 // Pop and thrust for x units
+	TRN = 1027 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
+	MNE = 1028 // Pop and mine with strength x
+	REP = 1029 // Pop and reproduce using x energy
 )
 
 type (
