@@ -51,10 +51,10 @@ END
 	m.Run()
 	t.Logf("%v", program)
 
-	if !assert.Len(t, m.stack, 1, "stack size") {
+	if !assert.Len(t, *m.stack, 1, "stack size") {
 		return
 	}
-	if !assert.Equal(t, int16(16&17), m.stack[0]) {
+	if !assert.Equal(t, int16(16&17), (*m.stack)[0]) {
 		return
 	}
 	if !assert.Equal(t, int16(16), m.registers[0]) {

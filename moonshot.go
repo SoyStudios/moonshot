@@ -12,6 +12,11 @@ import (
 	"golang.org/x/image/math/f64"
 )
 
+const (
+	worldWidth  = 16384
+	worldHeight = 16384
+)
+
 func main() {
 	os.Exit(runMain())
 }
@@ -26,6 +31,7 @@ func runMain() int {
 	ebiten.SetFullscreen(true)
 	w, h := ebiten.WindowSize()
 	g := &Game{p: &Player{}}
+	g.tps = 60
 	g.camera = &camera{
 		ViewPort: f64.Vec2{
 			float64(w),
@@ -47,7 +53,7 @@ func runMain() int {
 		return 1
 	}
 
-	g.init()
+	g.init(worldWidth, worldHeight)
 
 	if err := ebiten.RunGame(g); err != nil {
 		// nolint: errcheck

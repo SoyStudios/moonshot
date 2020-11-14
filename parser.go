@@ -39,6 +39,7 @@ func (s *Scanner) read() rune {
 }
 
 func (s *Scanner) unread() {
+	// nolint: errcheck
 	s.r.UnreadRune()
 }
 

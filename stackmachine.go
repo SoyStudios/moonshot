@@ -9,10 +9,9 @@ type (
 		run func(*Machine, []int16, func())
 
 		pc int // program counter
-		i  int // instruction counter
 
 		program   *Program
-		stack     stack
+		stack     *stack
 		registers [16]int16
 
 		state State
@@ -40,10 +39,15 @@ type (
 var (
 	stackPool = sync.Pool{
 		New: func() interface{} {
-			return stack(make([]int16, 0, 16))
+			s := stack(make([]int16, 0, 16))
+			return &s
 		},
 	}
 )
+
+func (s *stack) Reset() {
+	*s = (*s)[:0]
+}
 
 func (s *stack) Push(v int16) {
 	*s = append(*s, v)
@@ -59,7 +63,7 @@ func (s *stack) Pop() int16 {
 func NewMachine() *Machine {
 	m := &Machine{
 		run:   runInstruction,
-		stack: stackPool.Get().(stack)[:0],
+		stack: stackPool.Get().(*stack),
 	}
 	return m
 }
@@ -71,20 +75,20 @@ func (m *Machine) Destroy() {
 
 func (m *Machine) Run() {
 	m.pc = 0
-	m.stack = m.stack[:0]
+	m.stack.Reset()
 	if len(m.program.Evaluate) == 0 {
 		return
 	}
 	inst := Translate(Token(m.program.Evaluate[m.pc]))
 	inst.Run(m, m.program.Evaluate)
-	if len(m.stack) <= 0 {
+	if len(*m.stack) <= 0 {
 		return
 	}
 	if m.stack.Pop() < 1 {
 		return
 	}
 	m.pc = 0
-	m.stack = m.stack[:0]
+	m.stack.Reset()
 	inst = Translate(Token(m.program.Execute[m.pc]))
 	inst.Run(m, m.program.Execute)
 }

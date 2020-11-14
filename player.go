@@ -4,7 +4,6 @@ import "github.com/hajimehoshi/ebiten/v2"
 
 type (
 	Player struct {
-		x, y, angle float64
 	}
 )
 

@@ -9,51 +9,51 @@ import (
 
 const (
 	ILLEGAL Token = 0
-	EOF           = 1
-	WS            = 2
-	COMMENT       = 3
+	EOF     Token = 1
+	WS      Token = 2
+	COMMENT Token = 3
 
-	LITERAL = 8 // constant literal
+	LITERAL Token = 8 // constant literal
 
-	BEGIN = 16 // begin section statement
-	EV    = 17 // evaluation section
-	EX    = 18 // execution section
-	END   = 19 // end section statement
+	BEGIN Token = 16 // begin section statement
+	EV    Token = 17 // evaluation section
+	EX    Token = 18 // execution section
+	END   Token = 19 // end section statement
 
-	RDX = 32 // Read X vector and push it on the stack
-	RDY = 33 // Read Y vector and push it on the stack
-	RDE = 34 // Read total energy and push it on the stack
+	RDX Token = 32 // Read X vector and push it on the stack
+	RDY Token = 33 // Read Y vector and push it on the stack
+	RDE Token = 34 // Read total energy and push it on the stack
 
-	PSH = 64 // Push
-	POP = 65 // Pop
+	PSH Token = 64 // Push
+	POP Token = 65 // Pop
 
-	CON = 128 // Constant identifier
-	REG = 129 // Register identifier
+	CON Token = 128 // Constant identifier
+	REG Token = 129 // Register identifier
 
 	// comparison
 	// x COMP y, where x was pushed before y
-	GEQ = 256 // Pushes 1 if x >= y, else 0
-	LEQ = 257 // Pushes 1 if x <= y, else 0
-	IEQ = 258 // Pushes 1 if x == y, else 0
-	GRT = 259 // Pushes 1 if x > y, else 0
-	LST = 260 // Pushes 1 if x < y, else 0
+	GEQ Token = 256 // Pushes 1 if x >= y, else 0
+	LEQ Token = 257 // Pushes 1 if x <= y, else 0
+	IEQ Token = 258 // Pushes 1 if x == y, else 0
+	GRT Token = 259 // Pushes 1 if x > y, else 0
+	LST Token = 260 // Pushes 1 if x < y, else 0
 
-	NOT = 512 // Pushes !x
-	AND = 513 // Pushes x & y
-	IOR = 514 // Pushes x | y
-	XOR = 515 // Pushes x ^ y
-	ADD = 516 // Pushes x + y
-	SUB = 517 // Pushes x - y
-	MUL = 518 // Pushes x * y
-	DIV = 519 // Pushes x / y, nop if y == 0
-	NEG = 520 // Pushes -x
+	NOT Token = 512 // Pushes !x
+	AND Token = 513 // Pushes x & y
+	IOR Token = 514 // Pushes x | y
+	XOR Token = 515 // Pushes x ^ y
+	ADD Token = 516 // Pushes x + y
+	SUB Token = 517 // Pushes x - y
+	MUL Token = 518 // Pushes x * y
+	DIV Token = 519 // Pushes x / y, nop if y == 0
+	NEG Token = 520 // Pushes -x
 
-	RID = 1024 // Pushes the ID of the first object in current fov
-	SCN = 1025 // Pop x, y and pushes x, y to first object in current fov
-	THR = 1026 // Pop and thrust for x units
-	TRN = 1027 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
-	MNE = 1028 // Pop and mine with strength x
-	REP = 1029 // Pop and reproduce using x energy
+	RID Token = 1024 // Pushes the ID of the first object in current fov
+	SCN Token = 1025 // Pop x, y and pushes x, y to first object in current fov
+	THR Token = 1026 // Pop and thrust for x units
+	TRN Token = 1027 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
+	MNE Token = 1028 // Pop and mine with strength x
+	REP Token = 1029 // Pop and reproduce using x energy
 )
 
 type (
@@ -234,7 +234,7 @@ func TranslateProgram(tks []Token) []int16 {
 			continue
 		}
 		program[i] = Translate(t).Int()
-		if program[i] == REG || program[i] == CON {
+		if program[i] == int16(REG) || program[i] == int16(CON) {
 			constant = true
 		}
 	}
@@ -342,9 +342,9 @@ func (e Push) Run(m *Machine, code []int16) {
 		m.pc += 2
 
 		switch source.Int() {
-		case CON:
+		case int16(CON):
 			m.stack.Push(sourceValue)
-		case REG:
+		case int16(REG):
 			if int(sourceValue) > len(m.registers)-1 || sourceValue < 0 {
 				return
 			}
@@ -378,13 +378,13 @@ func (e Pop) Run(m *Machine, code []int16) {
 		sourceValue := code[m.pc+1]
 		m.pc += 2
 
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		switch source.Int() {
-		case CON:
+		case int16(CON):
 			return
-		case REG:
+		case int16(REG):
 			if int(sourceValue) > len(m.registers)-1 || sourceValue < 0 {
 				return
 			}
@@ -460,7 +460,7 @@ func (e GreaterEqual) Int() int16 {
 }
 func (e GreaterEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -483,7 +483,7 @@ func (e LessEqual) Int() int16 {
 }
 func (e LessEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -506,7 +506,7 @@ func (e IsEqual) Int() int16 {
 }
 func (e IsEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -529,7 +529,7 @@ func (e GreaterThan) Int() int16 {
 }
 func (e GreaterThan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -552,7 +552,7 @@ func (e LessThan) Int() int16 {
 }
 func (e LessThan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -575,7 +575,7 @@ func (e Not) Int() int16 {
 }
 func (e Not) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		a := m.stack.Pop()
@@ -598,7 +598,7 @@ func (e And) Int() int16 {
 }
 func (e And) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -617,7 +617,7 @@ func (e Or) Int() int16 {
 }
 func (e Or) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -636,7 +636,7 @@ func (e Xor) Int() int16 {
 }
 func (e Xor) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		a, b := m.stack.Pop(), m.stack.Pop()
@@ -655,7 +655,7 @@ func (e Add) Int() int16 {
 }
 func (e Add) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		a, b := m.stack.Pop(), m.stack.Pop()
@@ -674,7 +674,7 @@ func (e Sub) Int() int16 {
 }
 func (e Sub) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -693,7 +693,7 @@ func (e Mul) Int() int16 {
 }
 func (e Mul) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -712,7 +712,7 @@ func (e Div) Int() int16 {
 }
 func (e Div) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		b, a := m.stack.Pop(), m.stack.Pop()
@@ -734,7 +734,7 @@ func (n Neg) Int() int16 {
 }
 func (n Neg) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		a := m.stack.Pop()
@@ -753,7 +753,7 @@ func (e RemoteID) Int() int16 {
 }
 func (e RemoteID) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		a := m.stack.Pop()
@@ -772,7 +772,7 @@ func (e Scan) Int() int16 {
 }
 func (e Scan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 1 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		y, x := m.stack.Pop(), m.stack.Pop()
@@ -793,7 +793,7 @@ func (e Thrust) Int() int16 {
 }
 func (e Thrust) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		a := m.stack.Pop()
@@ -812,7 +812,7 @@ func (e Turn) Int() int16 {
 }
 func (e Turn) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		x, y := m.stack.Pop(), m.stack.Pop()
@@ -831,7 +831,7 @@ func (e Mine) Int() int16 {
 }
 func (e Mine) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		a := m.stack.Pop()
@@ -850,7 +850,7 @@ func (e Reproduce) Int() int16 {
 }
 func (e Reproduce) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(m.stack) <= 0 {
+		if len(*m.stack) <= 0 {
 			return
 		}
 		a := m.stack.Pop()
