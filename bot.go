@@ -15,8 +15,4 @@ type (
 )
 
 func (b *Bot) Draw(sprite *ebiten.Image, world *ebiten.Image) {
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Reset()
-	op.GeoM.Translate(b.Position().X, b.Position().Y)
-	world.DrawImage(sprite, op)
 }

@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	worldWidth  = 16384
-	worldHeight = 16384
+	windowWidth  = 1024
+	windowHeight = 768
 )
+
+var ErrExit = errors.New("exit")
 
 func main() {
 	os.Exit(runMain())
@@ -28,14 +30,15 @@ func runMain() int {
 		"level", "error",
 		"caller", log.DefaultCaller,
 	)
+	ebiten.SetWindowSize(windowWidth, windowHeight)
 	ebiten.SetFullscreen(true)
-	w, h := ebiten.WindowSize()
 	g := &Game{p: &Player{}}
 	g.tps = 60
 	g.camera = &camera{
+		Position: f64.Vec2{0, 0},
 		ViewPort: f64.Vec2{
-			float64(w),
-			float64(h),
+			float64(windowWidth),
+			float64(windowHeight),
 		},
 		zoomFactor: 1,
 	}
@@ -53,9 +56,12 @@ func runMain() int {
 		return 1
 	}
 
-	g.init(worldWidth, worldHeight)
+	g.init()
 
 	if err := ebiten.RunGame(g); err != nil {
+		if err == ErrExit {
+			return 0
+		}
 		// nolint: errcheck
 		errLog.Log("msg", "error during run",
 			"err", err,

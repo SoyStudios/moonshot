@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/jakecoffman/cp"
 	"golang.org/x/image/math/f64"
 )
@@ -29,11 +31,18 @@ type (
 
 		world *ebiten.Image
 
-		// width, height
 		w, h int
-		p    *Player
+
+		p *Player
 	}
 )
+
+func (c *camera) String() string {
+	return fmt.Sprintf(
+		"T: %.1f, VP: %.1f, R: %d, S: %d",
+		c.Position, c.ViewPort, c.rotation, c.zoomFactor,
+	)
+}
 
 func (c *camera) viewportCenter() f64.Vec2 {
 	return f64.Vec2{
@@ -72,15 +81,13 @@ func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
 	}
 }
 
-func (g *Game) init(worldWidth, worldHeight int) {
-	g.world = ebiten.NewImage(int(g.camera.ViewPort[0]/2)+1, int(g.camera.ViewPort[1]/2)+1)
-
+func (g *Game) init() {
 	b := &Bot{
 		Body:    g.space.AddBody(cp.NewBody(1000000, cp.INFINITY)),
 		machine: NewMachine(),
 	}
-	b.SetPosition(cp.Vector{X: 0, Y: 0})
-	b.SetVelocity(400, 0)
+	b.SetPosition(cp.Vector{X: 100, Y: 100})
+	b.SetVelocity(100, 0)
 
 	b.shape = cp.NewCircle(b.Body, 0.95, cp.Vector{})
 	b.shape.SetElasticity(0)
@@ -92,25 +99,46 @@ func (g *Game) init(worldWidth, worldHeight int) {
 
 func (g *Game) Update() error {
 	g.space.Step(1.0 / float64(ebiten.MaxTPS()))
+
+	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
+		return ErrExit
+	}
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.world.Fill(color.White)
+	s := ebiten.DeviceScaleFactor()
+	g.world = ebiten.NewImage(windowWidth, windowHeight)
+	g.world.Fill(color.Black)
 
 	op := &ebiten.DrawImageOptions{}
 	for _, bot := range g.bots {
 		op.GeoM.Reset()
 		op.GeoM.Translate(-g.camera.Position[0], -g.camera.Position[1])
-		op.GeoM.Translate(-g.camera.viewportCenter()[0], -g.camera.viewportCenter()[1])
 		op.GeoM.Translate(bot.Position().X, bot.Position().Y)
+		op.GeoM.Scale(s, s)
+		op.GeoM.Scale(1/1.01*float64(g.camera.zoomFactor), 1/1.01*float64(g.camera.zoomFactor))
 		g.world.DrawImage(g.assets.bot, op)
 	}
 
 	g.camera.Render(g.world, screen)
+
+	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
+	ebitenutil.DebugPrint(
+		screen,
+		fmt.Sprintf("TPS: %0.2f\n", ebiten.CurrentTPS()),
+	)
+
+	ebitenutil.DebugPrintAt(
+		screen,
+		fmt.Sprintf("%s\nCursor World Pos: %.2f,%.2f",
+			g.camera.String(),
+			worldX, worldY,
+		),
+		0, g.h-48,
+	)
 }
 
 func (g *Game) Layout(w, h int) (screenWidth, screenHeight int) {
-	g.w, g.h = w, h
-	return w, h
+	return windowWidth, windowHeight
 }
