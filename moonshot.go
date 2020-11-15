@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	windowWidth  = 1024
-	windowHeight = 768
+	windowWidth = 1024
 )
 
 var ErrExit = errors.New("exit")
@@ -30,15 +29,19 @@ func runMain() int {
 		"level", "error",
 		"caller", log.DefaultCaller,
 	)
-	ebiten.SetWindowSize(windowWidth, windowHeight)
-	ebiten.SetFullscreen(true)
+	w, h := ebiten.ScreenSizeInFullscreen()
+	ratio := float64(w) / float64(h)
 	g := &Game{p: &Player{}}
+	g.w = windowWidth
+	g.h = int(float64(g.w) / ratio)
+	ebiten.SetWindowSize(g.w, g.h)
+	ebiten.SetFullscreen(true)
 	g.tps = 60
 	g.camera = &camera{
-		Position: f64.Vec2{0, 0},
+		Position: f64.Vec2{100, 100},
 		ViewPort: f64.Vec2{
-			float64(windowWidth),
-			float64(windowHeight),
+			float64(g.w),
+			float64(g.h),
 		},
 		zoomFactor: 1,
 	}

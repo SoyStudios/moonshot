@@ -82,11 +82,13 @@ func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
 }
 
 func (g *Game) init() {
+	g.world = ebiten.NewImage(g.w, g.h)
+
 	b := &Bot{
 		Body:    g.space.AddBody(cp.NewBody(1000000, cp.INFINITY)),
 		machine: NewMachine(),
 	}
-	b.SetPosition(cp.Vector{X: 100, Y: 100})
+	b.SetPosition(cp.Vector{X: 512, Y: 384})
 	b.SetVelocity(100, 0)
 
 	b.shape = cp.NewCircle(b.Body, 0.95, cp.Vector{})
@@ -108,7 +110,6 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	s := ebiten.DeviceScaleFactor()
-	g.world = ebiten.NewImage(windowWidth, windowHeight)
 	g.world.Fill(color.Black)
 
 	op := &ebiten.DrawImageOptions{}
@@ -140,5 +141,5 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(w, h int) (screenWidth, screenHeight int) {
-	return windowWidth, windowHeight
+	return g.w, g.h
 }
