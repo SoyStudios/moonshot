@@ -60,4 +60,44 @@ END
 	if !assert.Equal(t, int16(16), m.registers[0]) {
 		return
 	}
+	if !stateMock.AssertExpectations(t) {
+		return
+	}
+}
+
+func TestTutorialBot(t *testing.T) {
+	code := `
+BEGIN EV
+	// Read bot’s current energy level and push it to the stack
+	RDE
+	PSH CON 1000
+	GEQ
+END
+BEGIN EX
+	PSH CON 500
+	REP
+END
+	`
+	p := NewParser(strings.NewReader(code))
+	program, err := p.Parse()
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	m := NewMachine()
+	m.run = runInstructionDebug
+	m.program = program
+	stateMock := &StateMock{}
+	m.state = stateMock
+
+	stateMock.On("Energy").Return(int16(1000))
+	stateMock.On("Reproduce", int16(500)).Once()
+
+	m.Run()
+	t.Logf("%v", program)
+
+	if !stateMock.AssertExpectations(t) {
+		return
+	}
 }

@@ -172,6 +172,8 @@ func (s *Scanner) scanIdent() (tok Token, lit string) {
 		return DIV, buf.String()
 	case "NEG":
 		return NEG, buf.String()
+	case "ABS":
+		return ABS, buf.String()
 
 	case "RID":
 		return RID, buf.String()

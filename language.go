@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -47,6 +48,7 @@ const (
 	MUL Token = 518 // Pushes x * y
 	DIV Token = 519 // Pushes x / y, nop if y == 0
 	NEG Token = 520 // Pushes -x
+	ABS Token = 521 // Pops x and y, and calculates the length of the vector
 
 	RID Token = 1024 // Pushes the ID of the first object in current fov
 	SCN Token = 1025 // Pop x, y and pushes x, y to first object in current fov
@@ -117,6 +119,8 @@ func Translate(token Token) Instruction {
 		return Div(DIV)
 	case NEG:
 		return Neg(NEG)
+	case ABS:
+		return Abs(ABS)
 
 	case RID:
 		return RemoteID(RID)
@@ -203,6 +207,8 @@ func (t Token) String() string {
 		return "DIV"
 	case NEG:
 		return "NEG"
+	case ABS:
+		return "ABS"
 
 	case RID:
 		return "RID"
@@ -742,6 +748,31 @@ func (n Neg) Run(m *Machine, code []int16) {
 	})
 }
 func (e Neg) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, e.Int())
+	return nil
+}
+
+type Abs int16
+
+func (n Abs) Int() int16 {
+	return int16(n)
+}
+func (n Abs) Run(m *Machine, code []int16) {
+	m.run(m, code, func() {
+		if len(*m.stack) <= 1 {
+			return
+		}
+		x, y := m.stack.Pop(), m.stack.Pop()
+		v := int16(math.Round(
+			math.Sqrt(
+				math.Pow(float64(x), 2) +
+					math.Pow(float64(y), 2),
+			),
+		))
+		m.stack.Push(v)
+	})
+}
+func (e Abs) Parse(p *Parser, program *[]int16) error {
 	*program = append(*program, e.Int())
 	return nil
 }
