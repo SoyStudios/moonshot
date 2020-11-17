@@ -65,6 +65,92 @@ END
 	}
 }
 
+func TestFullLanguage(t *testing.T) {
+	code := `
+BEGIN EV
+	RDX
+	RDY
+	ABS
+	RDE
+	PSH CON 0
+	GRT
+	PSH CON 2
+	POP REG 0
+	PSH CON 3
+	POP REG 1
+	PSH REG 0
+	PSH REG 1
+	LST
+	AND
+	XOR
+	NOT
+	PSH CON 0
+	IOR
+	PSH REG 1024
+	PSH CON 2
+	PSH REG 0
+	IEQ
+END
+BEGIN EX
+	RID
+	RDX
+	RDY
+	SCN
+	ABS
+	PSH CON 1024
+	LEQ
+	PSH CON 0
+	GEQ
+	PSH CON 1
+	XOR
+	PSH CON 2
+	SUB
+	THR
+	RDX
+	NEG
+	RDY
+	NEG
+	TRN
+	PSH REG 1
+	MNE
+	PSH REG 0
+	PSH REG 1
+	ADD
+	PSH CON 1
+	ADD
+	PSH CON 2
+	DIV
+	REP
+END
+	`
+	p := NewParser(strings.NewReader(code))
+	program, err := p.Parse()
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	m := NewMachine()
+	m.run = runWithBreak(44, runInstructionDebug)
+	m.program = program
+	stateMock := &StateMock{}
+	m.state = stateMock
+
+	stateMock.On("X").Return(int16(42))
+	stateMock.On("Y").Return(int16(420))
+	stateMock.On("Energy").Return(int16(17))
+
+	m.Run()
+	t.Logf("%v", program)
+	if !assert.Equal(t, 46, m.pc) {
+		return
+	}
+
+	if !stateMock.AssertExpectations(t) {
+		return
+	}
+}
+
 func TestTutorialBot(t *testing.T) {
 	code := `
 BEGIN EV

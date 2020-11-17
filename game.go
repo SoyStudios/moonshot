@@ -50,9 +50,9 @@ func (c *camera) viewportCenter() f64.Vec2 {
 		c.ViewPort[1] * 0.5,
 	}
 }
+
 func (c *camera) worldMatrix() ebiten.GeoM {
 	m := ebiten.GeoM{}
-	m.Translate(-c.Position[0], -c.Position[1])
 	// We want to scale and rotate around center of image / screen
 	m.Translate(-c.viewportCenter()[0], -c.viewportCenter()[1])
 	m.Scale(
@@ -88,10 +88,10 @@ func (g *Game) init() {
 		Body:    g.space.AddBody(cp.NewBody(1000000, cp.INFINITY)),
 		machine: NewMachine(),
 	}
-	b.SetPosition(cp.Vector{X: 512, Y: 384})
+	b.SetPosition(cp.Vector{X: 0, Y: 100})
 	b.SetVelocity(100, 0)
 
-	b.shape = cp.NewCircle(b.Body, 0.95, cp.Vector{})
+	b.shape = cp.NewCircle(b.Body, 16, cp.Vector{})
 	b.shape.SetElasticity(0)
 	b.shape.SetFriction(0)
 	g.space.AddShape(b.shape)
