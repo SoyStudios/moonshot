@@ -14,5 +14,18 @@ type (
 	}
 )
 
+func NewBot(sp *cp.Space) *Bot {
+	b := &Bot{
+		Body:    sp.AddBody(cp.NewBody(100, cp.INFINITY)),
+		machine: NewMachine(),
+	}
+	b.shape = cp.NewCircle(b.Body, 8, cp.Vector{})
+	b.shape.SetElasticity(0)
+	b.shape.SetFriction(0)
+	sp.AddShape(b.shape)
+
+	return b
+}
+
 func (b *Bot) Draw(sprite *ebiten.Image, world *ebiten.Image) {
 }

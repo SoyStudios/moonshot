@@ -11,6 +11,8 @@ import (
 	"golang.org/x/image/math/f64"
 )
 
+const baseZoomFactor = 1.01
+
 type (
 	camera struct {
 		ViewPort   f64.Vec2
@@ -20,6 +22,10 @@ type (
 	}
 
 	Game struct {
+		settings struct {
+			cameraMoveSpeed float64
+		}
+
 		assets *assets
 
 		camera *camera
@@ -56,8 +62,8 @@ func (c *camera) worldMatrix() ebiten.GeoM {
 	// We want to scale and rotate around center of image / screen
 	m.Translate(-c.viewportCenter()[0], -c.viewportCenter()[1])
 	m.Scale(
-		math.Pow(1.01, float64(c.zoomFactor)),
-		math.Pow(1.01, float64(c.zoomFactor)),
+		math.Pow(baseZoomFactor, float64(c.zoomFactor)),
+		math.Pow(baseZoomFactor, float64(c.zoomFactor)),
 	)
 	m.Rotate(float64(c.rotation) * 2 * math.Pi / 360)
 	m.Translate(c.viewportCenter()[0], c.viewportCenter()[1])
@@ -84,19 +90,20 @@ func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
 func (g *Game) init() {
 	g.world = ebiten.NewImage(g.w, g.h)
 
-	b := &Bot{
-		Body:    g.space.AddBody(cp.NewBody(1000000, cp.INFINITY)),
-		machine: NewMachine(),
-	}
+	b := NewBot(g.space)
 	b.SetPosition(cp.Vector{X: 0, Y: 100})
 	b.SetVelocity(100, 0)
 
-	b.shape = cp.NewCircle(b.Body, 16, cp.Vector{})
-	b.shape.SetElasticity(0)
-	b.shape.SetFriction(0)
-	g.space.AddShape(b.shape)
-
 	g.bots = []*Bot{b}
+
+	b = NewBot(g.space)
+	b.SetPosition(cp.Vector{X: 600, Y: 100})
+	b.SetVelocity(-10, 0)
+	g.bots = append(g.bots, b)
+
+	b = NewBot(g.space)
+	b.SetPosition(cp.Vector{X: 200, Y: 200})
+	g.bots = append(g.bots, b)
 }
 
 func (g *Game) Update() error {
@@ -105,11 +112,27 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+		g.camera.zoomFactor--
+		g.camera.Position[0] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[0])
+		g.camera.Position[1] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[1])
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyE) {
+		g.camera.zoomFactor++
+		g.camera.Position[0] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[0])
+		g.camera.Position[1] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[1])
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyW) {
+		g.camera.Position[1] -= math.Pow(baseZoomFactor, float64(g.camera.zoomFactor)) * g.settings.cameraMoveSpeed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyS) {
+		g.camera.Position[1] += math.Pow(baseZoomFactor, float64(g.camera.zoomFactor)) * g.settings.cameraMoveSpeed
+	}
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	s := ebiten.DeviceScaleFactor()
 	g.world.Fill(color.Black)
 
 	op := &ebiten.DrawImageOptions{}
@@ -117,8 +140,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		op.GeoM.Reset()
 		op.GeoM.Translate(-g.camera.Position[0], -g.camera.Position[1])
 		op.GeoM.Translate(bot.Position().X, bot.Position().Y)
-		op.GeoM.Scale(s, s)
-		op.GeoM.Scale(1/1.01*float64(g.camera.zoomFactor), 1/1.01*float64(g.camera.zoomFactor))
 		g.world.DrawImage(g.assets.bot, op)
 	}
 
