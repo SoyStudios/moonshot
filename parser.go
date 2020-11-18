@@ -126,6 +126,9 @@ func (s *Scanner) scanIdent() (tok Token, lit string) {
 	case "END":
 		return END, buf.String()
 
+	case "NOP":
+		return NOP, buf.String()
+
 	case "RDX":
 		return RDX, buf.String()
 	case "RDY":

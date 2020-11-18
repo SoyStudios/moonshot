@@ -20,6 +20,8 @@ type (
 		state State
 	}
 
+	runFunc func(*Machine, []int16, func())
+
 	Program struct {
 		Evaluate []int16
 		Execute  []int16
@@ -82,55 +84,59 @@ func (m *Machine) Run() {
 	if len(m.program.Evaluate) == 0 {
 		return
 	}
-	inst := Translate(Token(m.program.Evaluate[m.pc]))
-	inst.Run(m, m.program.Evaluate)
+	for {
+		inst := Translate(Token(m.program.Evaluate[m.pc]))
+		inst.Run(m, m.program.Evaluate)
+		m.pc++
+		if m.pc > len(m.program.Evaluate)-1 {
+			break
+		}
+	}
 	if len(*m.stack) <= 0 {
 		return
 	}
 	if m.stack.Pop() < 1 {
 		return
 	}
+
+	if len(m.program.Execute) == 0 {
+		return
+	}
 	m.pc = 0
 	m.stack.Reset()
-	inst = Translate(Token(m.program.Execute[m.pc]))
-	inst.Run(m, m.program.Execute)
+	for {
+		inst := Translate(Token(m.program.Execute[m.pc]))
+		inst.Run(m, m.program.Execute)
+		m.pc++
+		if m.pc > len(m.program.Execute)-1 {
+			break
+		}
+	}
 }
 
 func runInstruction(m *Machine, code []int16, f func()) {
-	m.pc++
 	f()
-	if m.pc > len(code)-1 {
-		return
-	}
-	inst := Translate(Token(code[m.pc]))
-	inst.Run(m, code)
 }
 
 func runInstructionDebug(m *Machine, code []int16, f func()) {
 	fmt.Printf("%v\n", code)
 	fmt.Println("pc", m.pc)
+	inst := Translate(Token(code[m.pc]))
+	fmt.Printf("%s\n", inst.String(m, code))
+	fmt.Println("exec")
 
-	m.pc++
 	f()
-	fmt.Printf("%v\n\n", m.stack)
-	if m.pc > len(code)-1 {
-		return
-	}
-	tok := Token(code[m.pc])
-	fmt.Printf("%s\n", tok)
 
-	inst := Translate(tok)
-	inst.Run(m, code)
+	fmt.Printf("stack: %v\n\n", m.stack)
 }
 
-func runWithBreak(breakpoint int, runFunc func(*Machine, []int16, func())) func(*Machine, []int16, func()) {
+func runWithBreak(breakpoint int, breakFunc func(m *Machine) bool, runFunc runFunc) runFunc {
 	return func(m *Machine, code []int16, f func()) {
-		m.pc++
 		if m.pc == breakpoint {
-			m.pc--
-			return
+			if !breakFunc(m) {
+				return
+			}
 		}
-		m.pc--
 		runFunc(m, code, f)
 	}
 }

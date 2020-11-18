@@ -15,6 +15,7 @@ const (
 	COMMENT Token = 3
 
 	LITERAL Token = 8 // constant literal
+	NOP     Token = 9 // no op
 
 	BEGIN Token = 16 // begin section statement
 	EV    Token = 17 // evaluation section
@@ -62,7 +63,8 @@ type (
 	Token int16
 
 	Instruction interface {
-		Int() int16
+		String(*Machine, []int16) string
+		// Int() int16
 		Run(*Machine, []int16)
 		Parse(*Parser, *[]int16) error
 	}
@@ -71,74 +73,76 @@ type (
 func Translate(token Token) Instruction {
 	switch token {
 	case LITERAL:
-		return Literal(LITERAL)
+		return Literal{}
+	case NOP:
+		return Nop{}
 
 	case RDX:
-		return ReadX(RDX)
+		return ReadX{}
 	case RDY:
-		return ReadY(RDY)
+		return ReadY{}
 	case RDE:
-		return ReadEnergy(RDE)
+		return ReadEnergy{}
 
 	case PSH:
-		return Push(PSH)
+		return Push{}
 	case POP:
-		return Pop(POP)
+		return Pop{}
 
 	case CON:
-		return Constant(CON)
+		return Constant{}
 	case REG:
-		return Register(REG)
+		return Register{}
 
 	case GEQ:
-		return GreaterEqual(GEQ)
+		return GreaterEqual{}
 	case LEQ:
-		return LessEqual(LEQ)
+		return LessEqual{}
 	case IEQ:
-		return IsEqual(IEQ)
+		return IsEqual{}
 	case GRT:
-		return GreaterThan(GRT)
+		return GreaterThan{}
 	case LST:
-		return LessThan(LST)
+		return LessThan{}
 
 	case NOT:
-		return Not(NOT)
+		return Not{}
 	case AND:
-		return And(AND)
+		return And{}
 	case IOR:
-		return Or(IOR)
+		return Or{}
 	case XOR:
-		return Xor(XOR)
+		return Xor{}
 	case ADD:
-		return Add(ADD)
+		return Add{}
 	case SUB:
-		return Sub(SUB)
+		return Sub{}
 	case MUL:
-		return Mul(MUL)
+		return Mul{}
 	case DIV:
-		return Div(DIV)
+		return Div{}
 	case NEG:
-		return Neg(NEG)
+		return Neg{}
 	case ABS:
-		return Abs(ABS)
+		return Abs{}
 
 	case RID:
-		return RemoteID(RID)
+		return RemoteID{}
 	case SCN:
-		return Scan(SCN)
+		return Scan{}
 	case THR:
-		return Thrust(THR)
+		return Thrust{}
 	case TRN:
-		return Turn(TRN)
+		return Turn{}
 	case MNE:
-		return Mine(MNE)
+		return Mine{}
 	case REP:
-		return Reproduce(REP)
+		return Reproduce{}
 
 	case ILLEGAL:
 		fallthrough
 	default:
-		return Illegal(ILLEGAL)
+		return Illegal{}
 	}
 }
 
@@ -151,6 +155,8 @@ func (t Token) String() string {
 
 	case LITERAL:
 		return "LITERAL"
+	case NOP:
+		return "NOP"
 
 	case BEGIN:
 		return "BEGIN"
@@ -230,28 +236,22 @@ func (t Token) String() string {
 	}
 }
 
+// TranslateProgram is a utility funtion for converting a
+// slice of (readable) tokens into the byte representation
 func TranslateProgram(tks []Token) []int16 {
 	program := make([]int16, len(tks))
-	var constant bool
 	for i, t := range tks {
-		if constant {
-			constant = false
-			program[i] = int16(t)
-			continue
-		}
-		program[i] = Translate(t).Int()
-		if program[i] == int16(REG) || program[i] == int16(CON) {
-			constant = true
-		}
+		program[i] = int16(t)
 	}
 	return program
 }
 
 // instructions
-type Illegal int16
 
-func (i Illegal) Int() int16 {
-	return int16(i)
+type Illegal struct{}
+
+func (i Illegal) String(*Machine, []int16) string {
+	return ILLEGAL.String()
 }
 func (i Illegal) Run(_ *Machine, _ []int16) {}
 func (i Illegal) Parse(p *Parser, pr *[]int16) error {
@@ -260,10 +260,40 @@ func (i Illegal) Parse(p *Parser, pr *[]int16) error {
 	return fmt.Errorf("cannot parse illegal token %s (\"%s\")", tok, lit)
 }
 
-type ReadX int16
+type Literal struct{}
 
-func (e ReadX) Int() int16 {
-	return int16(e)
+func (e Literal) String(m *Machine, code []int16) string {
+	return fmt.Sprintf("literal: %d", code[m.pc])
+}
+func (e Literal) Run(m *Machine, code []int16) {}
+func (e Literal) Parse(p *Parser, program *[]int16) error {
+	p.unscan()
+	_, lit := p.scanIgnoreWhitespace()
+	val, err := strconv.ParseInt(lit, 10, 16)
+	if err != nil {
+		return errors.Wrap(err, "invalid literal")
+	}
+	*program = append(*program, int16(val))
+	return nil
+}
+
+type Nop struct{}
+
+func (n Nop) String(_ *Machine, _ []int16) string {
+	return NOP.String()
+}
+func (n Nop) Run(m *Machine, code []int16) {
+	m.run(m, code, func() {})
+}
+func (n Nop) Parse(p *Parser, program *[]int16) error {
+	*program = append(*program, int16(NOP))
+	return nil
+}
+
+type ReadX struct{}
+
+func (e ReadX) String(*Machine, []int16) string {
+	return RDX.String()
 }
 func (e ReadX) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -271,14 +301,14 @@ func (e ReadX) Run(m *Machine, code []int16) {
 	})
 }
 func (e ReadX) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+	*program = append(*program, int16(RDX))
 	return nil
 }
 
-type ReadY int16
+type ReadY struct{}
 
-func (e ReadY) Int() int16 {
-	return int16(e)
+func (e ReadY) String(*Machine, []int16) string {
+	return RDY.String()
 }
 func (e ReadY) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -286,14 +316,17 @@ func (e ReadY) Run(m *Machine, code []int16) {
 	})
 }
 func (e ReadY) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+	*program = append(*program, int16(RDY))
 	return nil
 }
 
-type ReadEnergy int16
+type ReadEnergy struct{}
 
+func (e ReadEnergy) String(*Machine, []int16) string {
+	return RDE.String()
+}
 func (e ReadEnergy) Int() int16 {
-	return int16(e)
+	return int16(RDE)
 }
 func (e ReadEnergy) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -305,24 +338,32 @@ func (e ReadEnergy) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Push int16
+type Push struct{}
 
+func (e Push) String(m *Machine, code []int16) string {
+	if m.pc+2 > len(code)-1 {
+		return "PSH ILLEGAL"
+	}
+	source := Token(code[m.pc+1])
+	sourceValue := code[m.pc+2]
+	return fmt.Sprintf("%s %s %d", PSH, source, sourceValue)
+}
 func (e Push) Int() int16 {
-	return int16(e)
+	return int16(PSH)
 }
 func (e Push) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if m.pc+2 > len(code)-1 {
 			return
 		}
-		source := Translate(Token(code[m.pc]))
-		sourceValue := code[m.pc+1]
+		source := Token(code[m.pc+1])
+		sourceValue := code[m.pc+2]
 		m.pc += 2
 
-		switch source.Int() {
-		case int16(CON):
+		switch source {
+		case CON:
 			m.stack.Push(sourceValue)
-		case int16(REG):
+		case REG:
 			if int(sourceValue) > len(m.registers)-1 || sourceValue < 0 {
 				return
 			}
@@ -342,27 +383,35 @@ func (e Push) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Pop int16
+type Pop struct{}
 
+func (e Pop) String(m *Machine, code []int16) string {
+	if m.pc+2 > len(code)-1 {
+		return "POP ILLEGAL"
+	}
+	source := Translate(Token(code[m.pc+1]))
+	sourceValue := code[m.pc+2]
+	return fmt.Sprintf("%s %s %d", POP, source.String(m, code), sourceValue)
+}
 func (e Pop) Int() int16 {
-	return int16(e)
+	return int16(POP)
 }
 func (e Pop) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if m.pc+2 > len(code)-1 {
 			return
 		}
-		source := Translate(Token(code[m.pc]))
-		sourceValue := code[m.pc+1]
+		source := Token(code[m.pc+1])
+		sourceValue := code[m.pc+2]
 		m.pc += 2
 
 		if len(*m.stack) <= 0 {
 			return
 		}
-		switch source.Int() {
-		case int16(CON):
+		switch source {
+		case CON:
 			return
-		case int16(REG):
+		case REG:
 			if int(sourceValue) > len(m.registers)-1 || sourceValue < 0 {
 				return
 			}
@@ -382,43 +431,32 @@ func (e Pop) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Literal int16
+type Constant struct{}
 
-func (e Literal) Int() int16 {
-	return int16(e)
+func (e Constant) String(*Machine, []int16) string {
+	return CON.String()
 }
-func (e Literal) Run(m *Machine, code []int16) {}
-func (e Literal) Parse(p *Parser, program *[]int16) error {
-	p.unscan()
-	_, lit := p.scanIgnoreWhitespace()
-	val, err := strconv.ParseInt(lit, 10, 16)
-	if err != nil {
-		return errors.Wrap(err, "invalid literal")
-	}
-	*program = append(*program, int16(val))
-	return nil
-}
-
-type Constant int16
-
 func (e Constant) Int() int16 {
-	return int16(e)
+	return int16(CON)
 }
 func (e Constant) Run(m *Machine, code []int16) {}
 func (e Constant) Parse(p *Parser, program *[]int16) error {
 	*program = append(*program, e.Int())
 	tok, lit := p.scanIgnoreWhitespace()
 	if tok != LITERAL {
-		return fmt.Errorf("unexpected token %s (\"%s\") expecting CONST", tok, lit)
+		return fmt.Errorf("unexpected token %s (\"%s\") expecting LITERAL", tok, lit)
 	}
 	p.unscan()
 	return nil
 }
 
-type Register int16
+type Register struct{}
 
+func (e Register) String(*Machine, []int16) string {
+	return REG.String()
+}
 func (e Register) Int() int16 {
-	return int16(e)
+	return int16(REG)
 }
 func (e Register) Run(m *Machine, code []int16) {}
 func (e Register) Parse(p *Parser, program *[]int16) error {
@@ -431,10 +469,13 @@ func (e Register) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type GreaterEqual int16
+type GreaterEqual struct{}
 
+func (e GreaterEqual) String(*Machine, []int16) string {
+	return GEQ.String()
+}
 func (e GreaterEqual) Int() int16 {
-	return int16(e)
+	return int16(GEQ)
 }
 func (e GreaterEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -454,10 +495,13 @@ func (e GreaterEqual) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type LessEqual int16
+type LessEqual struct{}
 
+func (e LessEqual) String(*Machine, []int16) string {
+	return LEQ.String()
+}
 func (e LessEqual) Int() int16 {
-	return int16(e)
+	return int16(LEQ)
 }
 func (e LessEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -477,10 +521,13 @@ func (e LessEqual) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type IsEqual int16
+type IsEqual struct{}
 
+func (e IsEqual) String(*Machine, []int16) string {
+	return IEQ.String()
+}
 func (e IsEqual) Int() int16 {
-	return int16(e)
+	return int16(IEQ)
 }
 func (e IsEqual) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -500,10 +547,13 @@ func (e IsEqual) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type GreaterThan int16
+type GreaterThan struct{}
 
+func (e GreaterThan) String(*Machine, []int16) string {
+	return GRT.String()
+}
 func (e GreaterThan) Int() int16 {
-	return int16(e)
+	return int16(GRT)
 }
 func (e GreaterThan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -523,10 +573,13 @@ func (e GreaterThan) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type LessThan int16
+type LessThan struct{}
 
+func (e LessThan) String(*Machine, []int16) string {
+	return LST.String()
+}
 func (e LessThan) Int() int16 {
-	return int16(e)
+	return int16(LST)
 }
 func (e LessThan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -546,10 +599,13 @@ func (e LessThan) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Not int16
+type Not struct{}
 
+func (e Not) String(*Machine, []int16) string {
+	return NOT.String()
+}
 func (e Not) Int() int16 {
-	return int16(e)
+	return int16(NOT)
 }
 func (e Not) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -569,10 +625,13 @@ func (e Not) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type And int16
+type And struct{}
 
+func (e And) String(*Machine, []int16) string {
+	return AND.String()
+}
 func (e And) Int() int16 {
-	return int16(e)
+	return int16(AND)
 }
 func (e And) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -588,10 +647,13 @@ func (e And) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Or int16
+type Or struct{}
 
+func (e Or) String(*Machine, []int16) string {
+	return IOR.String()
+}
 func (e Or) Int() int16 {
-	return int16(e)
+	return int16(IOR)
 }
 func (e Or) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -607,10 +669,13 @@ func (e Or) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Xor int16
+type Xor struct{}
 
+func (e Xor) String(*Machine, []int16) string {
+	return XOR.String()
+}
 func (e Xor) Int() int16 {
-	return int16(e)
+	return int16(XOR)
 }
 func (e Xor) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -626,10 +691,13 @@ func (e Xor) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Add int16
+type Add struct{}
 
+func (e Add) String(*Machine, []int16) string {
+	return ADD.String()
+}
 func (e Add) Int() int16 {
-	return int16(e)
+	return int16(ADD)
 }
 func (e Add) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -645,10 +713,13 @@ func (e Add) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Sub int16
+type Sub struct{}
 
+func (e Sub) String(*Machine, []int16) string {
+	return SUB.String()
+}
 func (e Sub) Int() int16 {
-	return int16(e)
+	return int16(SUB)
 }
 func (e Sub) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -664,10 +735,13 @@ func (e Sub) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Mul int16
+type Mul struct{}
 
+func (e Mul) String(*Machine, []int16) string {
+	return MUL.String()
+}
 func (e Mul) Int() int16 {
-	return int16(e)
+	return int16(MUL)
 }
 func (e Mul) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -683,10 +757,13 @@ func (e Mul) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Div int16
+type Div struct{}
 
+func (e Div) String(*Machine, []int16) string {
+	return DIV.String()
+}
 func (e Div) Int() int16 {
-	return int16(e)
+	return int16(DIV)
 }
 func (e Div) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -705,10 +782,13 @@ func (e Div) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Neg int16
+type Neg struct{}
 
+func (n Neg) String(*Machine, []int16) string {
+	return NEG.String()
+}
 func (n Neg) Int() int16 {
-	return int16(n)
+	return int16(NEG)
 }
 func (n Neg) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -724,10 +804,13 @@ func (e Neg) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Abs int16
+type Abs struct{}
 
+func (n Abs) String(*Machine, []int16) string {
+	return ABS.String()
+}
 func (n Abs) Int() int16 {
-	return int16(n)
+	return int16(ABS)
 }
 func (n Abs) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -749,10 +832,13 @@ func (e Abs) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type RemoteID int16
+type RemoteID struct{}
 
+func (e RemoteID) String(*Machine, []int16) string {
+	return RID.String()
+}
 func (e RemoteID) Int() int16 {
-	return int16(e)
+	return int16(RID)
 }
 func (e RemoteID) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -768,10 +854,13 @@ func (e RemoteID) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Scan int16
+type Scan struct{}
 
+func (e Scan) String(*Machine, []int16) string {
+	return SCN.String()
+}
 func (e Scan) Int() int16 {
-	return int16(e)
+	return int16(SCN)
 }
 func (e Scan) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -789,10 +878,13 @@ func (e Scan) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Thrust int16
+type Thrust struct{}
 
+func (e Thrust) String(*Machine, []int16) string {
+	return THR.String()
+}
 func (e Thrust) Int() int16 {
-	return int16(e)
+	return int16(THR)
 }
 func (e Thrust) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -808,17 +900,20 @@ func (e Thrust) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Turn int16
+type Turn struct{}
 
+func (e Turn) String(*Machine, []int16) string {
+	return TRN.String()
+}
 func (e Turn) Int() int16 {
-	return int16(e)
+	return int16(TRN)
 }
 func (e Turn) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
 		}
-		x, y := m.stack.Pop(), m.stack.Pop()
+		y, x := m.stack.Pop(), m.stack.Pop()
 		m.state.Turn(x, y)
 	})
 }
@@ -827,10 +922,13 @@ func (e Turn) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Mine int16
+type Mine struct{}
 
+func (e Mine) String(*Machine, []int16) string {
+	return MNE.String()
+}
 func (e Mine) Int() int16 {
-	return int16(e)
+	return int16(MNE)
 }
 func (e Mine) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
@@ -846,10 +944,13 @@ func (e Mine) Parse(p *Parser, program *[]int16) error {
 	return nil
 }
 
-type Reproduce int16
+type Reproduce struct{}
 
+func (e Reproduce) String(*Machine, []int16) string {
+	return REP.String()
+}
 func (e Reproduce) Int() int16 {
-	return int16(e)
+	return int16(REP)
 }
 func (e Reproduce) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {

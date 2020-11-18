@@ -69,7 +69,7 @@ func TestSimpleMachine(t *testing.T) {
 		}),
 	}
 	m := NewMachine()
-	m.run = runInstructionDebug
+	m.run = runInstruction
 	m.program = program
 	stateMock := &StateMock{}
 	m.state = stateMock

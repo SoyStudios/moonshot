@@ -39,7 +39,7 @@ END
 	}
 
 	m := NewMachine()
-	m.run = runInstructionDebug
+	m.run = runInstruction
 	m.program = program
 	stateMock := &StateMock{}
 	m.state = stateMock
@@ -90,6 +90,7 @@ BEGIN EV
 	PSH CON 2
 	PSH REG 0
 	IEQ
+	NOP
 END
 BEGIN EX
 	RID
@@ -119,6 +120,8 @@ BEGIN EX
 	PSH CON 1
 	ADD
 	PSH CON 2
+	MUL
+	PSH CON 3
 	DIV
 	REP
 END
@@ -131,7 +134,25 @@ END
 	}
 
 	m := NewMachine()
-	m.run = runWithBreak(44, runInstructionDebug)
+	m.run = runWithBreak(44, func(m *Machine) bool {
+		if !assert.Equal(t, 44, m.pc) {
+			return false
+		}
+		if !assert.Equal(t, int16(0), (*m.stack)[0]) {
+			return false
+		}
+		if !assert.Equal(t, int16(1), (*m.stack)[1]) {
+			return false
+		}
+		if !assert.Equal(t, int16(2), m.registers[0]) {
+			return false
+		}
+		if !assert.Equal(t, int16(3), m.registers[1]) {
+			return false
+		}
+		return true
+	},
+		runInstructionDebug)
 	m.program = program
 	stateMock := &StateMock{}
 	m.state = stateMock
@@ -139,12 +160,13 @@ END
 	stateMock.On("X").Return(int16(42))
 	stateMock.On("Y").Return(int16(420))
 	stateMock.On("Energy").Return(int16(17))
+	stateMock.On("Scan", int16(42), int16(420)).Return(int16(12), int16(34))
+	stateMock.On("Thrust", int16(-2))
+	stateMock.On("Turn", int16(-42), int16(-420))
+	stateMock.On("Mine", int16(3))
+	stateMock.On("Reproduce", int16(4))
 
 	m.Run()
-	t.Logf("%v", program)
-	if !assert.Equal(t, 46, m.pc) {
-		return
-	}
 
 	if !stateMock.AssertExpectations(t) {
 		return
