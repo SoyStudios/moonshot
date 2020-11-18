@@ -57,16 +57,18 @@ func (s *StateMock) Reproduce(a int16) {
 }
 
 func TestSimpleMachine(t *testing.T) {
-	program := &Program{
-		Evaluate: TranslateProgram([]Token{
-			RDX,
-			PSH, CON, 0,
-			GEQ,
-		}),
-		Execute: TranslateProgram([]Token{
-			PSH, CON, 12,
-			THR,
-		}),
+	program := []*Gene{
+		&Gene{
+			Evaluate: TranslateProgram([]Token{
+				RDX,
+				PSH, CON, 0,
+				GEQ,
+			}),
+			Execute: TranslateProgram([]Token{
+				PSH, CON, 12,
+				THR,
+			}),
+		},
 	}
 	m := NewMachine()
 	m.run = runInstruction
@@ -91,16 +93,18 @@ func TestSimpleMachine(t *testing.T) {
 }
 
 func BenchmarkSimpleMachine(b *testing.B) {
-	program := &Program{
-		Evaluate: TranslateProgram([]Token{
-			RDX,
-			PSH, CON, 0,
-			GEQ,
-		}),
-		Execute: TranslateProgram([]Token{
-			PSH, CON, 12,
-			THR,
-		}),
+	program := []*Gene{
+		&Gene{
+			Evaluate: TranslateProgram([]Token{
+				RDX,
+				PSH, CON, 0,
+				GEQ,
+			}),
+			Execute: TranslateProgram([]Token{
+				PSH, CON, 12,
+				THR,
+			}),
+		},
 	}
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {

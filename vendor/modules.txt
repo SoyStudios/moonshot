@@ -47,6 +47,8 @@ github.com/hajimehoshi/ebiten/v2/internal/uidriver/glfw
 github.com/hajimehoshi/ebiten/v2/internal/uidriver/js
 github.com/hajimehoshi/ebiten/v2/internal/uidriver/mobile
 github.com/hajimehoshi/ebiten/v2/internal/web
+# github.com/jakecoffman/cp v1.0.0
+github.com/jakecoffman/cp
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0

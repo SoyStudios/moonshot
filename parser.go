@@ -228,51 +228,60 @@ func (p *Parser) scanIgnoreWhitespace() (tok Token, lit string) {
 	return
 }
 
-func (p *Parser) Parse() (*Program, error) {
-	pr := &Program{Evaluate: make([]int16, 0), Execute: make([]int16, 0)}
-
-	// begin evaluate
-	if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
-		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
-	}
-	if tok, lit := p.scanIgnoreWhitespace(); tok != EV {
-		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting evaluation section", tok, lit)
-	}
+func (p *Parser) Parse() ([]*Gene, error) {
+	pr := make([]*Gene, 0)
 	for {
-		tok, _ := p.scanIgnoreWhitespace()
-		if tok == END {
+		if tok, _ := p.scanIgnoreWhitespace(); tok == EOF {
 			break
 		}
-		if tok == COMMENT {
-			continue
-		}
-		inst := Translate(tok)
-		err := inst.Parse(p, &pr.Evaluate)
-		if err != nil {
-			return nil, err
-		}
-	}
+		p.unscan()
 
-	// begin execute
-	if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
-		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
-	}
-	if tok, lit := p.scanIgnoreWhitespace(); tok != EX {
-		return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting execution section", tok, lit)
-	}
-	for {
-		tok, _ := p.scanIgnoreWhitespace()
-		if tok == END {
-			break
+		g := &Gene{Evaluate: make([]int16, 0), Execute: make([]int16, 0)}
+
+		// begin evaluate
+		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
+			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
 		}
-		if tok == COMMENT {
-			continue
+		if tok, lit := p.scanIgnoreWhitespace(); tok != EV {
+			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting evaluation section", tok, lit)
 		}
-		inst := Translate(tok)
-		err := inst.Parse(p, &pr.Execute)
-		if err != nil {
-			return nil, err
+		for {
+			tok, _ := p.scanIgnoreWhitespace()
+			if tok == END {
+				break
+			}
+			if tok == COMMENT {
+				continue
+			}
+			inst := Translate(tok)
+			err := inst.Parse(p, &g.Evaluate)
+			if err != nil {
+				return nil, err
+			}
 		}
+
+		// begin execute
+		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
+			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
+		}
+		if tok, lit := p.scanIgnoreWhitespace(); tok != EX {
+			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting execution section", tok, lit)
+		}
+		for {
+			tok, _ := p.scanIgnoreWhitespace()
+			if tok == END {
+				break
+			}
+			if tok == COMMENT {
+				continue
+			}
+			inst := Translate(tok)
+			err := inst.Parse(p, &g.Execute)
+			if err != nil {
+				return nil, err
+			}
+		}
+		pr = append(pr, g)
 	}
 	return pr, nil
 }

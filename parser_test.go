@@ -30,6 +30,13 @@ BEGIN EX
 	PSH REG 1
 	AND
 END
+
+BEGIN EV
+	PSH CON 1
+END
+BEGIN EX
+	PSH CON 120
+END
 	`
 	p := NewParser(strings.NewReader(code))
 	program, err := p.Parse()
@@ -48,8 +55,7 @@ END
 	stateMock.On("Y").Return(int16(2))
 	stateMock.On("Scan", int16(1), int16(2)).Return(int16(16), int16(17))
 
-	m.Run()
-	t.Logf("%v", program)
+	m.RunGene(program[0])
 
 	if !assert.Len(t, *m.stack, 1, "stack size") {
 		return
@@ -61,6 +67,11 @@ END
 		return
 	}
 	if !stateMock.AssertExpectations(t) {
+		return
+	}
+
+	m.RunGene(program[1])
+	if !assert.Equal(t, int16(120), (*m.stack)[0]) {
 		return
 	}
 }

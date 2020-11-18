@@ -8,12 +8,18 @@ import (
 type (
 	stack []int16
 
+	// Machine is the stack machine powering bots.
+	//
+	// It is a 16 bit stack machine with 16 persistent
+	// registers.
+	//
+	// state represents the interface to the bot.
 	Machine struct {
-		run func(*Machine, []int16, func())
+		run runFunc
 
 		pc int // program counter
 
-		program   *Program
+		program   []*Gene
 		stack     *stack
 		registers [16]int16
 
@@ -22,7 +28,14 @@ type (
 
 	runFunc func(*Machine, []int16, func())
 
-	Program struct {
+	// Gene represents one gene of the bot's program.
+	//
+	// A Gene consists of two sections, an evaluation
+	// and an execution section.
+	// By the end of the evaluation section, the stack
+	// will be popped. If the value is > 0 the execution
+	// section will be executed.
+	Gene struct {
 		Evaluate []int16
 		Execute  []int16
 	}
@@ -79,16 +92,22 @@ func (m *Machine) Destroy() {
 }
 
 func (m *Machine) Run() {
+	for _, g := range m.program {
+		m.RunGene(g)
+	}
+}
+
+func (m *Machine) RunGene(g *Gene) {
 	m.pc = 0
 	m.stack.Reset()
-	if len(m.program.Evaluate) == 0 {
+	if len(g.Evaluate) == 0 {
 		return
 	}
 	for {
-		inst := Translate(Token(m.program.Evaluate[m.pc]))
-		inst.Run(m, m.program.Evaluate)
+		inst := Translate(Token(g.Evaluate[m.pc]))
+		inst.Run(m, g.Evaluate)
 		m.pc++
-		if m.pc > len(m.program.Evaluate)-1 {
+		if m.pc > len(g.Evaluate)-1 {
 			break
 		}
 	}
@@ -99,16 +118,16 @@ func (m *Machine) Run() {
 		return
 	}
 
-	if len(m.program.Execute) == 0 {
+	if len(g.Execute) == 0 {
 		return
 	}
 	m.pc = 0
 	m.stack.Reset()
 	for {
-		inst := Translate(Token(m.program.Execute[m.pc]))
-		inst.Run(m, m.program.Execute)
+		inst := Translate(Token(g.Execute[m.pc]))
+		inst.Run(m, g.Execute)
 		m.pc++
-		if m.pc > len(m.program.Execute)-1 {
+		if m.pc > len(g.Execute)-1 {
 			break
 		}
 	}

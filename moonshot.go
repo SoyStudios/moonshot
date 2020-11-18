@@ -75,10 +75,13 @@ func runMain() int {
 }
 
 type assets struct {
-	bot *ebiten.Image
+	bot      *ebiten.Image
+	asteroid *ebiten.Image
 }
 
 func loadAssets() (*assets, error) {
+	a := &assets{}
+
 	bot, err := ebitenutil.OpenFile("gamedata/bot.png")
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading bot sprite")
@@ -88,9 +91,18 @@ func loadAssets() (*assets, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "error decoding bot sprite")
 	}
-
-	a := &assets{}
 	a.bot = ebiten.NewImageFromImage(img)
+
+	asteroid, err := ebitenutil.OpenFile("gamedata/asteroid.png")
+	if err != nil {
+		return nil, errors.Wrap(err, "error loading asteroid sprite")
+	}
+	defer asteroid.Close()
+	img, err = png.Decode(asteroid)
+	if err != nil {
+		return nil, errors.Wrap(err, "error decoding asteroid sprite")
+	}
+	a.asteroid = ebiten.NewImageFromImage(img)
 
 	return a, nil
 }
