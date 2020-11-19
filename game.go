@@ -66,6 +66,16 @@ func (c *camera) worldMatrix() ebiten.GeoM {
 	return m
 }
 
+func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
+	g := ebiten.GeoM{}
+	g.Translate(-c.Position[0], -c.Position[1])
+	g.Translate(x, y)
+	g.Translate(-c.viewportCenter()[0], -c.viewportCenter()[1])
+	g.Scale(c.zoomFactor(), c.zoomFactor())
+	g.Translate(c.viewportCenter()[0], c.viewportCenter()[1])
+	return g
+}
+
 func (c *camera) Render(world, screen *ebiten.Image) {
 	screen.DrawImage(world, &ebiten.DrawImageOptions{
 		GeoM: c.worldMatrix(),
@@ -155,10 +165,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	op := &ebiten.DrawImageOptions{}
 	for _, bot := range g.bots {
-		op.GeoM.Reset()
-		op.GeoM.Translate(-g.camera.Position[0], -g.camera.Position[1])
-		op.GeoM.Scale(g.camera.zoomFactor(), g.camera.zoomFactor())
-		op.GeoM.Translate(bot.Position().X, bot.Position().Y)
+		op.GeoM = g.camera.worldObjectMatrix(bot.Position().X, bot.Position().Y)
 		g.world.DrawImage(g.assets.bot, op)
 	}
 
