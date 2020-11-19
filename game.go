@@ -66,6 +66,8 @@ func (c *camera) worldMatrix() ebiten.GeoM {
 	return m
 }
 
+// worldObjectMatrix returns a matrix used to place an object
+// onto the world on coordinates x, y
 func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
 	g := ebiten.GeoM{}
 	g.Translate(-c.Position[0], -c.Position[1])
