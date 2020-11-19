@@ -15,10 +15,10 @@ const baseZoomFactor = 1.01
 
 type (
 	camera struct {
-		ViewPort   f64.Vec2
-		Position   f64.Vec2
-		zoomFactor int
-		rotation   int
+		ViewPort f64.Vec2
+		Position f64.Vec2
+		zoomStep int
+		rotation int
 	}
 
 	Game struct {
@@ -45,8 +45,8 @@ type (
 
 func (c *camera) String() string {
 	return fmt.Sprintf(
-		"T: %.1f, VP: %.1f, R: %d, S: %d",
-		c.Position, c.ViewPort, c.rotation, c.zoomFactor,
+		"T: %.1f, VP: %.1f, R: %d, S: %d, Z: %.1f",
+		c.Position, c.ViewPort, c.rotation, c.zoomStep, c.zoomFactor(),
 	)
 }
 
@@ -61,10 +61,6 @@ func (c *camera) worldMatrix() ebiten.GeoM {
 	m := ebiten.GeoM{}
 	// We want to scale and rotate around center of image / screen
 	m.Translate(-c.viewportCenter()[0], -c.viewportCenter()[1])
-	m.Scale(
-		math.Pow(baseZoomFactor, float64(c.zoomFactor)),
-		math.Pow(baseZoomFactor, float64(c.zoomFactor)),
-	)
 	m.Rotate(float64(c.rotation) * 2 * math.Pi / 360)
 	m.Translate(c.viewportCenter()[0], c.viewportCenter()[1])
 	return m
@@ -78,6 +74,7 @@ func (c *camera) Render(world, screen *ebiten.Image) {
 
 func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
 	inverseMatrix := c.worldMatrix()
+	inverseMatrix.Translate(-c.Position[0], -c.Position[1])
 	if inverseMatrix.IsInvertible() {
 		inverseMatrix.Invert()
 		return inverseMatrix.Apply(float64(posX), float64(posY))
@@ -85,6 +82,23 @@ func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
 		// When scaling it can happend that matrix is not invertable
 		return math.NaN(), math.NaN()
 	}
+}
+
+func (c *camera) zoomFactor() float64 {
+	return math.Pow(baseZoomFactor, float64(c.zoomStep))
+}
+
+func (c *camera) zoomTo(x, y float64) {
+	op := ebiten.GeoM{}
+	// magnitude
+	mag := math.Sqrt(math.Pow(x, 2) + math.Pow(y, 2))
+	// unit vector
+	uv := f64.Vec2{
+		x / mag,
+		y / mag,
+	}
+	op.Translate(uv[0], uv[1])
+	c.Position[0], c.Position[1] = op.Apply(c.Position[0], c.Position[1])
 }
 
 func (g *Game) init() {
@@ -114,20 +128,24 @@ func (g *Game) Update() error {
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyQ) {
-		g.camera.zoomFactor--
-		g.camera.Position[0] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[0])
-		g.camera.Position[1] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[1])
+		g.camera.zoomStep--
+		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyE) {
-		g.camera.zoomFactor++
-		g.camera.Position[0] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[0])
-		g.camera.Position[1] = math.Pow(baseZoomFactor, g.camera.viewportCenter()[1])
+		g.camera.zoomStep++
+		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyW) {
-		g.camera.Position[1] -= math.Pow(baseZoomFactor, float64(g.camera.zoomFactor)) * g.settings.cameraMoveSpeed
+		g.camera.Position[1] -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyS) {
-		g.camera.Position[1] += math.Pow(baseZoomFactor, float64(g.camera.zoomFactor)) * g.settings.cameraMoveSpeed
+		g.camera.Position[1] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyA) {
+		g.camera.Position[0] -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyD) {
+		g.camera.Position[0] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	}
 	return nil
 }
@@ -139,6 +157,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for _, bot := range g.bots {
 		op.GeoM.Reset()
 		op.GeoM.Translate(-g.camera.Position[0], -g.camera.Position[1])
+		op.GeoM.Scale(g.camera.zoomFactor(), g.camera.zoomFactor())
 		op.GeoM.Translate(bot.Position().X, bot.Position().Y)
 		g.world.DrawImage(g.assets.bot, op)
 	}

@@ -43,7 +43,7 @@ func runMain() int {
 			float64(g.w),
 			float64(g.h),
 		},
-		zoomFactor: 1,
+		zoomStep: 1,
 	}
 	g.settings.cameraMoveSpeed = 10
 	g.space = cp.NewSpace()
