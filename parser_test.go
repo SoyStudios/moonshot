@@ -196,6 +196,25 @@ BEGIN EX
 	PSH CON 500
 	REP
 END
+
+BEGIN EV
+	// If total velocity is >= 400
+	RDX
+	RDY
+	ABS
+	PSH CON 400
+	GEQ
+END
+BEGIN EX
+	// Turn and thrust in opposite direction
+	RDX
+	NEG
+	RDY
+	NEG
+	TRN
+	PSH CON 200
+	THR
+END
 	`
 	p := NewParser(strings.NewReader(code))
 	program, err := p.Parse()
@@ -212,6 +231,10 @@ END
 
 	stateMock.On("Energy").Return(int16(1000))
 	stateMock.On("Reproduce", int16(500)).Once()
+	stateMock.On("X").Return(int16(42))
+	stateMock.On("Y").Return(int16(420))
+	stateMock.On("Turn", int16(-42), int16(-420))
+	stateMock.On("Thrust", int16(200))
 
 	m.Run()
 	t.Logf("%v", program)

@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"runtime"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -126,19 +127,69 @@ func (c *camera) zoomTo(x, y float64) {
 func (g *Game) init() {
 	g.world = ebiten.NewImage(g.w, g.h)
 
-	b := NewBot(g.space)
+	b := NewBot(g.space, 1)
 	b.SetPosition(cp.Vector{X: 0, Y: 100})
 	b.SetVelocity(100, 0)
 
 	g.bots = []*Bot{b}
 
-	b = NewBot(g.space)
+	b = NewBot(g.space, 1)
 	b.SetPosition(cp.Vector{X: 600, Y: 100})
 	b.SetVelocity(-10, 0)
 	g.bots = append(g.bots, b)
 
-	b = NewBot(g.space)
+	code := `
+BEGIN EV
+	// Read bot’s current energy level and push it to the stack
+	RDE
+	PSH CON 1000
+	GEQ
+END
+BEGIN EX
+	PSH CON 500
+	REP
+END
+
+BEGIN EV
+	RDX
+	RDY
+	ABS
+	PSH CON 400
+	LST
+END
+BEGIN EX
+	PSH CON 100
+	THR
+END
+
+BEGIN EV
+	// If total velocity is >= 400
+	RDX
+	RDY
+	ABS
+	PSH CON 400
+	GEQ
+END
+BEGIN EX
+	// Turn and thrust in opposite direction
+	RDX
+	NEG
+	RDY
+	NEG
+	TRN
+	PSH CON 200
+	THR
+END
+	`
+	p := NewParser(strings.NewReader(code))
+	program, err := p.Parse()
+	if err != nil {
+		panic(err)
+	}
+
+	b = NewBot(g.space, 1)
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
+	b.machine.program = program
 	g.bots = append(g.bots, b)
 
 	g.numRunners = runtime.NumCPU() - 1
