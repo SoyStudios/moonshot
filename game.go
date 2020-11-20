@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"runtime"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -33,9 +34,13 @@ type (
 		tps int
 
 		space *cp.Space
-		bots  []*Bot
-
 		world *ebiten.Image
+
+		bots []*Bot
+
+		numRunners int
+		botChan    chan *Bot
+		doneChan   chan struct{}
 
 		w, h int
 
@@ -130,6 +135,12 @@ func (g *Game) init() {
 	b = NewBot(g.space)
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
 	g.bots = append(g.bots, b)
+
+	g.numRunners = runtime.NumCPU()
+	if g.numRunners < 2 {
+		g.numRunners = 2
+	}
+	g.doneChan = make(chan struct{}, 1)
 }
 
 func (g *Game) Update() error {
@@ -158,6 +169,18 @@ func (g *Game) Update() error {
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyD) {
 		g.camera.Position[0] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+	}
+
+	g.botChan = make(chan *Bot, 1)
+	for i := 0; i < g.numRunners; i++ {
+		go BotRunner(g.botChan, g.doneChan)
+	}
+	for _, bot := range g.bots {
+		g.botChan <- bot
+	}
+	close(g.botChan)
+	for i := 0; i < len(g.bots); i++ {
+		<-g.doneChan
 	}
 	return nil
 }

@@ -14,6 +14,17 @@ type (
 	}
 )
 
+func BotRunner(bc <-chan *Bot, done chan struct{}) {
+	for {
+		b, ok := <-bc
+		if !ok {
+			break
+		}
+		b.machine.Run()
+		done <- struct{}{}
+	}
+}
+
 func NewBot(sp *cp.Space) *Bot {
 	b := &Bot{
 		Body:    sp.AddBody(cp.NewBody(100, cp.INFINITY)),
