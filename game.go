@@ -8,6 +8,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/jakecoffman/cp"
 	"golang.org/x/image/math/f64"
 )
@@ -25,7 +26,11 @@ type (
 	Game struct {
 		settings struct {
 			cameraMoveSpeed float64
+
+			inputMap map[string][]ebiten.Key
 		}
+
+		paused bool
 
 		assets *assets
 
@@ -143,34 +148,70 @@ func (g *Game) init() {
 	g.doneChan = make(chan struct{}, 1)
 }
 
-func (g *Game) Update() error {
-	g.space.Step(1.0 / float64(ebiten.MaxTPS()))
+func repeatingKeyPressed(key ebiten.Key) bool {
+	const (
+		delay    = 30
+		interval = 3
+	)
+	d := inpututil.KeyPressDuration(key)
+	if d == 1 {
+		return true
+	}
+	if d >= delay && (d-delay)%interval == 0 {
+		return true
+	}
+	return false
+}
 
+func (g *Game) updateOnKey(input string, f func()) {
+	for _, k := range g.settings.inputMap[input] {
+		if ebiten.IsKeyPressed(k) {
+			f()
+		}
+	}
+}
+
+func (g *Game) updateOnRepeatingKey(input string, f func()) {
+	for _, k := range g.settings.inputMap[input] {
+		if repeatingKeyPressed(k) {
+			f()
+		}
+	}
+}
+
+func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
 
-	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+	g.updateOnKey("zoomOut", func() {
 		g.camera.zoomStep--
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyE) {
+	})
+	g.updateOnKey("zoomIn", func() {
 		g.camera.zoomStep++
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyW) {
+	})
+	g.updateOnKey("up", func() {
 		g.camera.Position[1] -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyS) {
+	})
+	g.updateOnKey("down", func() {
 		g.camera.Position[1] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyA) {
+	})
+	g.updateOnKey("left", func() {
 		g.camera.Position[0] -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyD) {
+	})
+	g.updateOnKey("right", func() {
 		g.camera.Position[0] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
-	}
+	})
 
+	g.updateOnRepeatingKey("pause", func() {
+		g.paused = !g.paused
+	})
+
+	if g.paused {
+		return nil
+	}
 	g.botChan = make(chan *Bot, 1)
 	for i := 0; i < g.numRunners; i++ {
 		go BotRunner(g.botChan, g.doneChan)
@@ -182,6 +223,7 @@ func (g *Game) Update() error {
 	for i := 0; i < len(g.bots); i++ {
 		<-g.doneChan
 	}
+	g.space.Step(1.0 / float64(ebiten.MaxTPS()))
 	return nil
 }
 

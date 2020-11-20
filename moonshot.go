@@ -46,6 +46,7 @@ func runMain() int {
 		zoomStep: 1,
 	}
 	g.settings.cameraMoveSpeed = 10
+	g.settings.inputMap = defaultInputMap()
 	g.space = cp.NewSpace()
 	g.space.Iterations = 1
 	g.space.UseSpatialHash(2.0, 10000)
