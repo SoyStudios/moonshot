@@ -209,7 +209,9 @@ func (g *Game) Update() error {
 		g.paused = !g.paused
 	})
 	g.updateOnRepeatingKey("speedUp", func() {
-		g.cyclesPerTick *= 2
+		if ebiten.CurrentTPS() > 10 {
+			g.cyclesPerTick *= 2
+		}
 	})
 	g.updateOnRepeatingKey("speedDown", func() {
 		g.cyclesPerTick /= 2
@@ -233,7 +235,11 @@ func (g *Game) Update() error {
 		for i := 0; i < len(g.bots); i++ {
 			<-g.doneChan
 		}
-		g.space.Step(1.0 / 60)
+		tps := ebiten.CurrentTPS()
+		if tps == 0 {
+			tps = 60
+		}
+		g.space.Step(1.0 / tps)
 	}
 	return nil
 }
