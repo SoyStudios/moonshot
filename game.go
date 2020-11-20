@@ -141,7 +141,7 @@ func (g *Game) init() {
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
 	g.bots = append(g.bots, b)
 
-	g.numRunners = runtime.NumCPU()
+	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {
 		g.numRunners = 2
 	}
@@ -183,6 +183,12 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
+	g.updateOnRepeatingKey("pause", func() {
+		g.paused = !g.paused
+	})
+	if g.paused {
+		return nil
+	}
 
 	g.updateOnKey("zoomOut", func() {
 		g.camera.zoomStep--
@@ -205,9 +211,6 @@ func (g *Game) Update() error {
 		g.camera.Position[0] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 
-	g.updateOnRepeatingKey("pause", func() {
-		g.paused = !g.paused
-	})
 	g.updateOnRepeatingKey("speedUp", func() {
 		if ebiten.CurrentTPS() > 10 {
 			g.cyclesPerTick *= 2
@@ -220,9 +223,6 @@ func (g *Game) Update() error {
 		}
 	})
 
-	if g.paused {
-		return nil
-	}
 	for i := 0; i < g.cyclesPerTick; i++ {
 		g.botChan = make(chan *Bot, 1)
 		for i := 0; i < g.numRunners; i++ {
