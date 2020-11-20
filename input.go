@@ -13,5 +13,8 @@ func defaultInputMap() map[string][]ebiten.Key {
 		"zoomIn":  {ebiten.KeyE},
 
 		"pause": {ebiten.KeySpace},
+
+		"speedUp":   {ebiten.KeyEqual},
+		"speedDown": {ebiten.KeyMinus},
 	}
 }

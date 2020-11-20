@@ -36,7 +36,7 @@ type (
 
 		camera *camera
 
-		tps int
+		cyclesPerTick int
 
 		space *cp.Space
 		world *ebiten.Image
@@ -208,22 +208,33 @@ func (g *Game) Update() error {
 	g.updateOnRepeatingKey("pause", func() {
 		g.paused = !g.paused
 	})
+	g.updateOnRepeatingKey("speedUp", func() {
+		g.cyclesPerTick *= 2
+	})
+	g.updateOnRepeatingKey("speedDown", func() {
+		g.cyclesPerTick /= 2
+		if g.cyclesPerTick <= 0 {
+			g.cyclesPerTick = 1
+		}
+	})
 
 	if g.paused {
 		return nil
 	}
-	g.botChan = make(chan *Bot, 1)
-	for i := 0; i < g.numRunners; i++ {
-		go BotRunner(g.botChan, g.doneChan)
+	for i := 0; i < g.cyclesPerTick; i++ {
+		g.botChan = make(chan *Bot, 1)
+		for i := 0; i < g.numRunners; i++ {
+			go BotRunner(g.botChan, g.doneChan)
+		}
+		for _, bot := range g.bots {
+			g.botChan <- bot
+		}
+		close(g.botChan)
+		for i := 0; i < len(g.bots); i++ {
+			<-g.doneChan
+		}
+		g.space.Step(1.0 / 60)
 	}
-	for _, bot := range g.bots {
-		g.botChan <- bot
-	}
-	close(g.botChan)
-	for i := 0; i < len(g.bots); i++ {
-		<-g.doneChan
-	}
-	g.space.Step(1.0 / float64(ebiten.MaxTPS()))
 	return nil
 }
 
@@ -241,7 +252,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
 	ebitenutil.DebugPrint(
 		screen,
-		fmt.Sprintf("TPS: %0.2f\n", ebiten.CurrentTPS()),
+		fmt.Sprintf("TPS: %0.2f, C: %d\n",
+			ebiten.CurrentTPS(), g.cyclesPerTick),
 	)
 
 	ebitenutil.DebugPrintAt(

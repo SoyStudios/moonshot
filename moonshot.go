@@ -36,7 +36,7 @@ func runMain() int {
 	g.h = int(float64(g.w) / ratio)
 	ebiten.SetWindowSize(g.w, g.h)
 	ebiten.SetFullscreen(true)
-	g.tps = 60
+	g.cyclesPerTick = 1
 	g.camera = &camera{
 		Position: f64.Vec2{100, 100},
 		ViewPort: f64.Vec2{
