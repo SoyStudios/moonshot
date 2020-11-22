@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"log"
 	"math"
 	"runtime"
 	"strings"
@@ -11,15 +12,14 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/jakecoffman/cp"
-	"golang.org/x/image/math/f64"
 )
 
 const baseZoomFactor = 1.01
 
 type (
 	camera struct {
-		ViewPort f64.Vec2
-		Position f64.Vec2
+		ViewPort cp.Vector
+		Position cp.Vector
 		zoomStep int
 		rotation int
 	}
@@ -61,19 +61,19 @@ func (c *camera) String() string {
 	)
 }
 
-func (c *camera) viewportCenter() f64.Vec2 {
-	return f64.Vec2{
-		c.ViewPort[0] * 0.5,
-		c.ViewPort[1] * 0.5,
+func (c *camera) viewportCenter() cp.Vector {
+	return cp.Vector{
+		X: c.ViewPort.X * 0.5,
+		Y: c.ViewPort.Y * 0.5,
 	}
 }
 
 func (c *camera) worldMatrix() ebiten.GeoM {
 	m := ebiten.GeoM{}
 	// We want to scale and rotate around center of image / screen
-	m.Translate(-c.viewportCenter()[0], -c.viewportCenter()[1])
+	m.Translate(-c.viewportCenter().X, -c.viewportCenter().Y)
 	m.Rotate(float64(c.rotation) * 2 * math.Pi / 360)
-	m.Translate(c.viewportCenter()[0], c.viewportCenter()[1])
+	m.Translate(c.viewportCenter().X, c.viewportCenter().Y)
 	return m
 }
 
@@ -81,11 +81,11 @@ func (c *camera) worldMatrix() ebiten.GeoM {
 // onto the world on coordinates x, y
 func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
 	g := ebiten.GeoM{}
-	g.Translate(-c.Position[0], -c.Position[1])
+	g.Translate(-c.Position.X, -c.Position.Y)
 	g.Translate(x, y)
-	g.Translate(-c.viewportCenter()[0], -c.viewportCenter()[1])
+	g.Translate(-c.viewportCenter().X, -c.viewportCenter().Y)
 	g.Scale(c.zoomFactor(), c.zoomFactor())
-	g.Translate(c.viewportCenter()[0], c.viewportCenter()[1])
+	g.Translate(c.viewportCenter().X, c.viewportCenter().Y)
 	return g
 }
 
@@ -95,9 +95,15 @@ func (c *camera) Render(world, screen *ebiten.Image) {
 	})
 }
 
+func (c *camera) WorldToScreen(x, y float64) (float64, float64) {
+	vec := cp.Vector{X: x, Y: y}
+	vec = vec.Add(c.Position.Neg())
+	return vec.X, vec.Y
+}
+
 func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
 	inverseMatrix := c.worldMatrix()
-	inverseMatrix.Translate(-c.Position[0], -c.Position[1])
+	inverseMatrix.Translate(-c.Position.X, -c.Position.Y)
 	if inverseMatrix.IsInvertible() {
 		inverseMatrix.Invert()
 		return inverseMatrix.Apply(float64(posX), float64(posY))
@@ -112,16 +118,9 @@ func (c *camera) zoomFactor() float64 {
 }
 
 func (c *camera) zoomTo(x, y float64) {
-	op := ebiten.GeoM{}
-	// magnitude
-	mag := math.Sqrt(math.Pow(x, 2) + math.Pow(y, 2))
-	// unit vector
-	uv := f64.Vec2{
-		x / mag,
-		y / mag,
-	}
-	op.Translate(uv[0], uv[1])
-	c.Position[0], c.Position[1] = op.Apply(c.Position[0], c.Position[1])
+	to := cp.Vector{X: x, Y: y}
+	to = to.Clamp(1 / c.zoomFactor())
+	c.Position = c.Position.Add(to)
 }
 
 func (g *Game) init() {
@@ -154,7 +153,7 @@ BEGIN EV
 	RDX
 	RDY
 	ABS
-	PSH CON 400
+	PSH CON 500
 	LST
 END
 BEGIN EX
@@ -177,7 +176,7 @@ BEGIN EX
 	RDY
 	NEG
 	TRN
-	PSH CON 200
+	PSH CON 300
 	THR
 END
 	`
@@ -234,13 +233,6 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
-	g.updateOnRepeatingKey("pause", func() {
-		g.paused = !g.paused
-	})
-	if g.paused {
-		return nil
-	}
-
 	g.updateOnKey("zoomOut", func() {
 		g.camera.zoomStep--
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
@@ -250,18 +242,24 @@ func (g *Game) Update() error {
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	})
 	g.updateOnKey("up", func() {
-		g.camera.Position[1] -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+		g.camera.Position.Y -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("down", func() {
-		g.camera.Position[1] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+		g.camera.Position.Y += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("left", func() {
-		g.camera.Position[0] -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+		g.camera.Position.X -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("right", func() {
-		g.camera.Position[0] += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
+		g.camera.Position.X += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 
+	g.updateOnRepeatingKey("pause", func() {
+		g.paused = !g.paused
+	})
+	if g.paused {
+		return nil
+	}
 	g.updateOnRepeatingKey("speedUp", func() {
 		if ebiten.CurrentTPS() > 10 {
 			g.cyclesPerTick *= 2
@@ -299,9 +297,31 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.world.Fill(color.Black)
 
 	op := &ebiten.DrawImageOptions{}
+	botSizeX, botSizeY := g.assets.bot.Size()
+	botDX, botDY := float64(botSizeX)/2, float64(botSizeY)/2
 	for _, bot := range g.bots {
-		op.GeoM = g.camera.worldObjectMatrix(bot.Position().X, bot.Position().Y)
+		op.GeoM = g.camera.worldObjectMatrix(
+			bot.Position().X-botDX,
+			bot.Position().Y-botDY,
+		)
 		g.world.DrawImage(g.assets.bot, op)
+
+		ms := g.camera.worldObjectMatrix(0, 0)
+		dir := cp.ForAngle(bot.Angle())
+		dir = dir.Clamp(1)
+		dir = dir.Mult(32)
+		me := g.camera.worldObjectMatrix(dir.X, dir.Y)
+		sx, sy := ms.Apply(bot.Position().X, bot.Position().Y)
+		dx, dy := me.Apply(bot.Position().X, bot.Position().Y)
+		log.Printf("dv: %.2f,%.2f - %.2f,%.2f\n",
+			sx, sy,
+			dx, dy,
+		)
+		ebitenutil.DrawLine(g.world,
+			sx, sy,
+			dx, dy,
+			color.RGBA{255, 0, 0, 255},
+		)
 	}
 
 	g.camera.Render(g.world, screen)
@@ -309,8 +329,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
 	ebitenutil.DebugPrint(
 		screen,
-		fmt.Sprintf("TPS: %0.2f, C: %d\n",
-			ebiten.CurrentTPS(), g.cyclesPerTick),
+		fmt.Sprintf("TPS: %0.2f, C: %d\nB: %.2f,%.2f, M: %.2f, BA: %.2f, BAV: %.2f",
+			ebiten.CurrentTPS(), g.cyclesPerTick,
+			g.bots[2].Velocity().X, g.bots[2].Velocity().Y,
+			math.Sqrt(math.Pow(g.bots[2].Velocity().X, 2)+math.Pow(g.bots[2].Velocity().Y, 2)),
+			180/math.Pi*g.bots[2].Angle(), g.bots[2].AngularVelocity(),
+		),
 	)
 
 	ebitenutil.DebugPrintAt(

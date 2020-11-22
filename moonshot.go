@@ -9,7 +9,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/jakecoffman/cp"
 	"github.com/pkg/errors"
-	"golang.org/x/image/math/f64"
 )
 
 const (
@@ -38,10 +37,10 @@ func runMain() int {
 	ebiten.SetFullscreen(true)
 	g.cyclesPerTick = 1
 	g.camera = &camera{
-		Position: f64.Vec2{100, 100},
-		ViewPort: f64.Vec2{
-			float64(g.w),
-			float64(g.h),
+		Position: cp.Vector{X: 100, Y: 100},
+		ViewPort: cp.Vector{
+			X: float64(g.w),
+			Y: float64(g.h),
 		},
 		zoomStep: 1,
 	}

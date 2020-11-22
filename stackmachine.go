@@ -41,6 +41,7 @@ type (
 	}
 
 	State interface {
+		Reset()
 		X() int16
 		Y() int16
 		Energy() int16
@@ -92,6 +93,7 @@ func (m *Machine) Destroy() {
 }
 
 func (m *Machine) Run() {
+	m.state.Reset()
 	for _, g := range m.program {
 		m.RunGene(g)
 	}

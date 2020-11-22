@@ -10,6 +10,10 @@ type StateMock struct {
 	mock.Mock
 }
 
+func (s *StateMock) Reset() {
+	s.Called()
+}
+
 func (s *StateMock) X() int16 {
 	args := s.Called()
 	return args.Get(0).(int16)
@@ -76,6 +80,7 @@ func TestSimpleMachine(t *testing.T) {
 	stateMock := &StateMock{}
 	m.state = stateMock
 
+	stateMock.On("Reset")
 	stateMock.On("X").Return(int16(4)).Once()
 	stateMock.On("Thrust", int16(12)).Once()
 

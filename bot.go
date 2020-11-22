@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"math"
 
 	"github.com/jakecoffman/cp"
@@ -18,6 +19,8 @@ type (
 		// thrustStep translates a given thrust step value
 		// to a force
 		thrustStep func(int16) float64
+
+		impulses []cp.Vector
 
 		shape   *cp.Shape
 		machine *Machine
@@ -56,6 +59,9 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 				return 200
 			}
 		},
+
+		impulses: make([]cp.Vector, 0),
+
 		machine: NewMachine(),
 	}
 	b.machine.state = b
@@ -65,6 +71,10 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 	sp.AddShape(b.shape)
 
 	return b
+}
+
+func (b *Bot) Reset() {
+	b.impulses = b.impulses[:0]
 }
 
 func (b *Bot) X() int16 {
@@ -93,18 +103,23 @@ func (b *Bot) Scan(x, y int16) (int16, int16) {
 
 func (b *Bot) Thrust(step int16) {
 	dir := cp.ForAngle(b.Angle())
-	dir = dir.Neg()
 	dir = dir.Mult(b.thrustStep(step))
+	log.Printf("thr: %.2f,%.2f\n", dir.X, dir.Y)
 	b.ApplyImpulseAtLocalPoint(
 		dir,
-		cp.Vector{X: 0, Y: 0},
+		b.CenterOfGravity(),
 	)
 }
 
 func (b *Bot) Turn(x, y int16) {
 	v := cp.Vector{X: float64(x), Y: float64(y)}
 	a := v.ToAngle()
+	log.Printf("v: %.2f,%.2f av: %.2f\n",
+		v.X, v.Y,
+		a,
+	)
 	b.SetAngularVelocity(a)
+	b.SetTorque(100)
 }
 
 func (b *Bot) Mine(strength int16) {
