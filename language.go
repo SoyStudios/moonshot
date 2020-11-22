@@ -891,8 +891,8 @@ func (e Thrust) Run(m *Machine, code []int16) {
 		if len(*m.stack) <= 0 {
 			return
 		}
-		a := m.stack.Pop()
-		m.state.Thrust(a)
+		y, x := m.stack.Pop(), m.stack.Pop()
+		m.state.Thrust(x, y)
 	})
 }
 func (e Thrust) Parse(p *Parser, program *[]int16) error {

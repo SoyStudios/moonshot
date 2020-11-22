@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"image/color"
-	"log"
 	"math"
 	"runtime"
 	"strings"
@@ -153,7 +152,7 @@ BEGIN EV
 	RDX
 	RDY
 	ABS
-	PSH CON 500
+	PSH CON 300
 	LST
 END
 BEGIN EX
@@ -162,11 +161,11 @@ BEGIN EX
 END
 
 BEGIN EV
-	// If total velocity is >= 400
+	// If total velocity is >= 200
 	RDX
 	RDY
 	ABS
-	PSH CON 400
+	PSH CON 200
 	GEQ
 END
 BEGIN EX
@@ -313,15 +312,25 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		me := g.camera.worldObjectMatrix(dir.X, dir.Y)
 		sx, sy := ms.Apply(bot.Position().X, bot.Position().Y)
 		dx, dy := me.Apply(bot.Position().X, bot.Position().Y)
-		log.Printf("dv: %.2f,%.2f - %.2f,%.2f\n",
-			sx, sy,
-			dx, dy,
-		)
 		ebitenutil.DrawLine(g.world,
 			sx, sy,
 			dx, dy,
 			color.RGBA{255, 0, 0, 255},
 		)
+
+		for _, imp := range bot.impulses {
+			ms = g.camera.worldObjectMatrix(bot.CenterOfGravity().X, bot.CenterOfGravity().Y)
+			sx, sy = ms.Apply(bot.Position().X, bot.Position().Y)
+			me = g.camera.worldObjectMatrix(imp.X, imp.Y)
+			dx, dy = me.Apply(bot.Position().X, bot.Position().Y)
+			ebitenutil.DrawLine(g.world,
+				sx, sy,
+				dx, dy,
+				color.RGBA{0, 255, 0, 255},
+			)
+		}
+
+		bot.FrameReset()
 	}
 
 	g.camera.Render(g.world, screen)

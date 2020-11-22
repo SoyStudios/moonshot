@@ -117,6 +117,7 @@ BEGIN EX
 	XOR
 	PSH CON 2
 	SUB
+	PSH CON 134
 	THR
 	RDX
 	NEG
@@ -173,7 +174,7 @@ END
 	stateMock.On("Y").Return(int16(420))
 	stateMock.On("Energy").Return(int16(17))
 	stateMock.On("Scan", int16(42), int16(420)).Return(int16(12), int16(34))
-	stateMock.On("Thrust", int16(-2))
+	stateMock.On("Thrust", int16(-2), int16(134))
 	stateMock.On("Turn", int16(-42), int16(-420))
 	stateMock.On("Mine", int16(3))
 	stateMock.On("Reproduce", int16(4))
@@ -212,8 +213,6 @@ BEGIN EX
 	NEG
 	RDY
 	NEG
-	TRN
-	PSH CON 200
 	THR
 END
 	`
@@ -235,8 +234,7 @@ END
 	stateMock.On("Reproduce", int16(500)).Once()
 	stateMock.On("X").Return(int16(42))
 	stateMock.On("Y").Return(int16(420))
-	stateMock.On("Turn", int16(-42), int16(-420))
-	stateMock.On("Thrust", int16(200))
+	stateMock.On("Thrust", int16(-42), int16(-420))
 
 	m.Run()
 	t.Logf("%v", program)

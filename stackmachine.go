@@ -48,7 +48,7 @@ type (
 		ID() int16
 		RemoteID(int16) int16
 		Scan(int16, int16) (int16, int16)
-		Thrust(int16)
+		Thrust(int16, int16)
 		Turn(int16, int16)
 		Mine(int16)
 		Reproduce(int16)
@@ -152,8 +152,10 @@ func runInstructionDebug(m *Machine, code []int16, f func()) {
 }
 
 func runWithBreak(breakpoint int, breakFunc func(m *Machine) bool, runFunc runFunc) runFunc {
+	var ran bool
 	return func(m *Machine, code []int16, f func()) {
-		if m.pc == breakpoint {
+		if !ran && m.pc == breakpoint {
+			ran = true
 			if !breakFunc(m) {
 				return
 			}

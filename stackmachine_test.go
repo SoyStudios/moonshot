@@ -44,8 +44,8 @@ func (s *StateMock) Scan(x, y int16) (int16, int16) {
 	return args.Get(0).(int16), args.Get(1).(int16)
 }
 
-func (s *StateMock) Thrust(a int16) {
-	s.Called(a)
+func (s *StateMock) Thrust(x, y int16) {
+	s.Called(x, y)
 }
 
 func (s *StateMock) Turn(x, y int16) {
@@ -70,6 +70,7 @@ func TestSimpleMachine(t *testing.T) {
 			}),
 			Execute: TranslateProgram([]Token{
 				PSH, CON, 12,
+				PSH, CON, 13,
 				THR,
 			}),
 		},
@@ -82,7 +83,7 @@ func TestSimpleMachine(t *testing.T) {
 
 	stateMock.On("Reset")
 	stateMock.On("X").Return(int16(4)).Once()
-	stateMock.On("Thrust", int16(12)).Once()
+	stateMock.On("Thrust", int16(12), int16(13)).Once()
 
 	m.Run()
 	if !stateMock.AssertExpectations(t) {
@@ -107,6 +108,7 @@ func BenchmarkSimpleMachine(b *testing.B) {
 			}),
 			Execute: TranslateProgram([]Token{
 				PSH, CON, 12,
+				PSH, CON, 13,
 				THR,
 			}),
 		},
@@ -119,7 +121,7 @@ func BenchmarkSimpleMachine(b *testing.B) {
 			m.state = stateMock
 
 			stateMock.On("X").Return(int16(4))
-			stateMock.On("Thrust", int16(12))
+			stateMock.On("Thrust", int16(12), int16(13))
 
 			m.Run()
 		}
