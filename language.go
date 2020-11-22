@@ -888,7 +888,7 @@ func (e Thrust) Int() int16 {
 }
 func (e Thrust) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(*m.stack) <= 0 {
+		if len(*m.stack) <= 1 {
 			return
 		}
 		y, x := m.stack.Pop(), m.stack.Pop()

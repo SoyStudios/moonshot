@@ -109,6 +109,9 @@ func (b *Bot) Scan(x, y int16) (int16, int16) {
 
 func (b *Bot) Thrust(x, y int16) {
 	v := cp.Vector{X: float64(x), Y: float64(y)}
+	log.Printf("thr: %.2f,%.2f\n",
+		v.X, v.Y,
+	)
 	b.thrust = b.thrust.Add(v)
 }
 
@@ -129,13 +132,15 @@ func (b *Bot) Reproduce(energy int16) {
 }
 
 func (b *Bot) Execute() {
-	// apply thrust
-	v := b.thrust
-	v = v.Clamp(300)
-	log.Printf("thr: %.2f,%.2f\n", v.X, v.Y)
-	b.ApplyImpulseAtLocalPoint(
-		v,
-		b.CenterOfGravity(),
-	)
-	b.impulses = append(b.impulses, v)
+	if b.thrust.X != 0 || b.thrust.Y != 0 {
+		// apply thrust
+		v := b.thrust
+		v = v.Clamp(300)
+		log.Printf("exec thr: %.2f,%.2f\n", v.X, v.Y)
+		b.ApplyImpulseAtLocalPoint(
+			v,
+			b.CenterOfGravity(),
+		)
+		b.impulses = append(b.impulses, v)
+	}
 }

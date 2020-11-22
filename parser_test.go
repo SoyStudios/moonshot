@@ -170,6 +170,7 @@ END
 	m.state = stateMock
 
 	stateMock.On("Reset")
+	stateMock.On("Execute")
 	stateMock.On("X").Return(int16(42))
 	stateMock.On("Y").Return(int16(420))
 	stateMock.On("Energy").Return(int16(17))
@@ -230,6 +231,7 @@ END
 	m.state = stateMock
 
 	stateMock.On("Reset")
+	stateMock.On("Execute")
 	stateMock.On("Energy").Return(int16(1000))
 	stateMock.On("Reproduce", int16(500)).Once()
 	stateMock.On("X").Return(int16(42))

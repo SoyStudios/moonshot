@@ -42,6 +42,7 @@ type (
 
 	State interface {
 		Reset()
+		Execute()
 		X() int16
 		Y() int16
 		Energy() int16
@@ -97,6 +98,7 @@ func (m *Machine) Run() {
 	for _, g := range m.program {
 		m.RunGene(g)
 	}
+	m.state.Execute()
 }
 
 func (m *Machine) RunGene(g *Gene) {
