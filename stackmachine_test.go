@@ -52,8 +52,8 @@ func (s *StateMock) Thrust(x, y int16) {
 	s.Called(x, y)
 }
 
-func (s *StateMock) Turn(x, y int16) {
-	s.Called(x, y)
+func (s *StateMock) Turn(a int16) {
+	s.Called(a)
 }
 
 func (s *StateMock) Mine(a int16) {

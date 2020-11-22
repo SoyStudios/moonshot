@@ -19,7 +19,7 @@ func isLetter(ch rune) bool {
 }
 
 func isDigit(ch rune) bool {
-	return ch >= '0' && ch <= '9'
+	return (ch >= '0' && ch <= '9') || ch == '-'
 }
 
 type Scanner struct {

@@ -10,20 +10,30 @@ import (
 type (
 	Bot struct {
 		*cp.Body
-
+		shape *cp.Shape
 		space *cp.Space
 
 		id int16
 
+		// Components
+
+		// leonhardEfficiency (< 1) is the efficiency of the
+		// Leonhard Reactor. How efficiently we can convert
+		// energy to matter and back.
+		//
+		// Implemented as a lambda, possible hook for later
+		// upgrade mechanics.
 		leonhardEfficiency func() float64
 		// thrustStep translates a given thrust step value
 		// to a force
 		thrustStep func(int16) float64
+		// scan FOV in degrees
+		scanFOV func() float64
 
 		impulses []cp.Vector
 		thrust   cp.Vector
+		angle    float64
 
-		shape   *cp.Shape
 		machine *Machine
 	}
 )
@@ -41,7 +51,7 @@ func BotRunner(bc <-chan *Bot, done chan struct{}) {
 
 func NewBot(sp *cp.Space, id int16) *Bot {
 	b := &Bot{
-		Body: sp.AddBody(cp.NewBody(100, cp.INFINITY)),
+		Body: sp.AddBody(cp.NewBody(100, 10)),
 
 		space: sp,
 
@@ -109,20 +119,15 @@ func (b *Bot) Scan(x, y int16) (int16, int16) {
 
 func (b *Bot) Thrust(x, y int16) {
 	v := cp.Vector{X: float64(x), Y: float64(y)}
-	log.Printf("thr: %.2f,%.2f\n",
-		v.X, v.Y,
-	)
 	b.thrust = b.thrust.Add(v)
 }
 
-func (b *Bot) Turn(x, y int16) {
-	v := cp.Vector{X: float64(x), Y: float64(y)}
-	a := v.ToAngle()
-	log.Printf("v: %.2f,%.2f av: %.2f\n",
-		v.X, v.Y,
-		a,
+func (b *Bot) Turn(a int16) {
+	angle := float64(a) / 180 * math.Pi
+	log.Printf("ad: %d, av: %.2f\n",
+		a, angle,
 	)
-	b.SetAngularVelocity(a)
+	b.angle += angle
 }
 
 func (b *Bot) Mine(strength int16) {

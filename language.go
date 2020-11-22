@@ -53,7 +53,7 @@ const (
 
 	RID Token = 1024 // Pushes the ID of the first object in current fov
 	SCN Token = 1025 // Pop x, y and pushes x, y to first object in current fov
-	THR Token = 1026 // Pop and thrust for x units
+	THR Token = 1026 // Pop x, y and thrust for the vector
 	TRN Token = 1027 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
 	MNE Token = 1028 // Pop and mine with strength x
 	REP Token = 1029 // Pop and reproduce using x energy
@@ -910,11 +910,11 @@ func (e Turn) Int() int16 {
 }
 func (e Turn) Run(m *Machine, code []int16) {
 	m.run(m, code, func() {
-		if len(*m.stack) <= 1 {
+		if len(*m.stack) <= 0 {
 			return
 		}
-		y, x := m.stack.Pop(), m.stack.Pop()
-		m.state.Turn(x, y)
+		a := m.stack.Pop()
+		m.state.Turn(a)
 	})
 }
 func (e Turn) Parse(p *Parser, program *[]int16) error {

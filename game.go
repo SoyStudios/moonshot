@@ -31,6 +31,7 @@ type (
 		}
 
 		paused bool
+		step   int
 
 		assets *assets
 
@@ -96,6 +97,8 @@ func (c *camera) Render(world, screen *ebiten.Image) {
 	})
 }
 
+// WorldToScreen translates world coordinates (such as positions of bots
+// etc.) into screen coordinates for rendering onto the world plane
 func (c *camera) WorldToScreen(x, y float64) (float64, float64) {
 	vec := cp.Vector{X: x, Y: y}
 	vec = vec.Add(c.Position.Neg())
@@ -120,7 +123,8 @@ func (c *camera) zoomFactor() float64 {
 
 func (c *camera) zoomTo(x, y float64) {
 	to := cp.Vector{X: x, Y: y}
-	to = to.Clamp(1 / c.zoomFactor())
+	to = to.Clamp(1)
+	to = to.Mult(1 / c.zoomFactor())
 	c.Position = c.Position.Add(to)
 }
 
@@ -218,6 +222,30 @@ BEGIN EX
 	NEG
 	THR
 END
+
+BEGIN EV
+	// if reg2 < 1
+	PSH REG 2
+	PSH CON 1
+	LST
+END
+BEGIN EX
+	PSH CON 1
+	POP REG 2
+	PSH CON 10
+	POP REG 3
+END
+
+BEGIN EV
+	// if reg2 >= 1
+	PSH REG 2
+	PSH CON 1
+	GEQ
+END
+BEGIN EX
+	PSH REG 3
+	TRN
+END
 	`
 	p := NewParser(strings.NewReader(code))
 	program, err := p.Parse()
@@ -269,10 +297,13 @@ func (g *Game) updateOnRepeatingKey(input string, f func()) {
 	}
 }
 
+// Update is the main update loop
 func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
+
+	// Camera controls
 	g.updateOnKey("zoomOut", func() {
 		g.camera.zoomStep--
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
@@ -294,12 +325,21 @@ func (g *Game) Update() error {
 		g.camera.Position.X += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 
+	// pause
 	g.updateOnRepeatingKey("pause", func() {
 		g.paused = !g.paused
 	})
-	if g.paused {
+	g.updateOnRepeatingKey("step", func() {
+		if g.paused {
+			g.step++
+		}
+	})
+	if g.paused && g.step == 0 {
 		return nil
 	}
+	g.step = 0
+
+	// Game speed controls
 	g.updateOnRepeatingKey("speedUp", func() {
 		if ebiten.CurrentTPS() > 10 {
 			g.cyclesPerTick *= 2
@@ -312,6 +352,7 @@ func (g *Game) Update() error {
 		}
 	})
 
+	// Run bot cycles
 	for i := 0; i < g.cyclesPerTick; i++ {
 		g.botChan = make(chan *Bot, 1)
 		for i := 0; i < g.numRunners; i++ {
@@ -346,8 +387,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		)
 		g.world.DrawImage(g.assets.bot, op)
 
+		// draw viewing angle
+		// start position matrix
 		ms := g.camera.worldObjectMatrix(0, 0)
-		dir := cp.ForAngle(bot.Angle())
+		dir := cp.ForAngle(bot.angle)
 		dir = dir.Clamp(1)
 		dir = dir.Mult(32)
 		me := g.camera.worldObjectMatrix(dir.X, dir.Y)
@@ -359,6 +402,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			color.RGBA{255, 0, 0, 255},
 		)
 
+		// draw impulses
 		for _, imp := range bot.impulses {
 			ms = g.camera.worldObjectMatrix(bot.CenterOfGravity().X, bot.CenterOfGravity().Y)
 			sx, sy = ms.Apply(bot.Position().X, bot.Position().Y)

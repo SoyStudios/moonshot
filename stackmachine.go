@@ -41,16 +41,24 @@ type (
 	}
 
 	State interface {
+		// Reset resets the bot for each cycle
+		// Accumulated values (such as thrust vector) are reset
 		Reset()
+		// Execute takes accumulated values and activates
+		// the bot's systems
 		Execute()
+		// Returns current velocity vector X component
 		X() int16
+		// Returns current velocity vector Y component
 		Y() int16
+		// Returns current energy value, that is mass * Leonhard efficiency
 		Energy() int16
+		// Returns bot's ID
 		ID() int16
 		RemoteID(int16) int16
 		Scan(int16, int16) (int16, int16)
 		Thrust(int16, int16)
-		Turn(int16, int16)
+		Turn(int16)
 		Mine(int16)
 		Reproduce(int16)
 	}
