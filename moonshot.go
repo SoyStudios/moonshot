@@ -2,13 +2,16 @@ package main
 
 import (
 	"image/png"
+	"io/ioutil"
 	"os"
 
 	"github.com/go-kit/kit/log"
+	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/jakecoffman/cp"
 	"github.com/pkg/errors"
+	"golang.org/x/image/font"
 )
 
 const (
@@ -49,6 +52,7 @@ func runMain() int {
 	g.space = cp.NewSpace()
 	g.space.Iterations = 1
 	g.space.UseSpatialHash(2.0, 10000)
+	g.ui = NewUI(g)
 
 	var err error
 	g.assets, err = loadAssets()
@@ -76,19 +80,54 @@ func runMain() int {
 }
 
 type assets struct {
+	ui       *ebiten.Image
 	bot      *ebiten.Image
 	asteroid *ebiten.Image
+	font     font.Face
 }
 
 func loadAssets() (*assets, error) {
 	a := &assets{}
+
+	fontFile, err := os.Open("gamedata/IBMPlexMono-Regular.ttf")
+	if err != nil {
+		return nil, errors.Wrap(err, "error loading font")
+	}
+	defer fontFile.Close()
+	fd, err := ioutil.ReadAll(fontFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading font")
+	}
+	f, err := truetype.Parse(fd)
+	if err != nil {
+		return nil, errors.Wrap(err, "error parsing font")
+	}
+	a.font = truetype.NewFace(f, &truetype.Options{
+		Size:    12,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating font face")
+	}
+
+	ui, err := ebitenutil.OpenFile("gamedata/ui.png")
+	if err != nil {
+		return nil, errors.Wrap(err, "error loading ui sprite")
+	}
+	defer ui.Close()
+	img, err := png.Decode(ui)
+	if err != nil {
+		return nil, errors.Wrap(err, "error decoding ui sprite")
+	}
+	a.ui = ebiten.NewImageFromImage(img)
 
 	bot, err := ebitenutil.OpenFile("gamedata/bot.png")
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading bot sprite")
 	}
 	defer bot.Close()
-	img, err := png.Decode(bot)
+	img, err = png.Decode(bot)
 	if err != nil {
 		return nil, errors.Wrap(err, "error decoding bot sprite")
 	}

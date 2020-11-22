@@ -47,6 +47,8 @@ type (
 		botChan    chan *Bot
 		doneChan   chan struct{}
 
+		ui *UI
+
 		w, h int
 
 		p *Player
@@ -227,6 +229,7 @@ END
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
 	b.machine.program = program
 	g.bots = append(g.bots, b)
+	g.ui.bot = b
 
 	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {
@@ -383,6 +386,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			180/math.Pi*g.bots[2].Angle(), g.bots[2].AngularVelocity(),
 		),
 	)
+
+	g.ui.Draw(screen)
 
 	ebitenutil.DebugPrintAt(
 		screen,
