@@ -257,7 +257,7 @@ END
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
 	b.machine.program = program
 	g.bots = append(g.bots, b)
-	g.ui.bot = b
+	g.ui.info = b
 
 	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {
@@ -302,6 +302,8 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
+
+	g.ui.Update()
 
 	// Camera controls
 	g.updateOnKey("zoomOut", func() {

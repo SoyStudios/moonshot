@@ -1,9 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"image/color"
 	"log"
 	"math"
+	"strings"
 
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/jakecoffman/cp"
 )
 
@@ -30,9 +35,10 @@ type (
 		// scan FOV in degrees
 		scanFOV func() float64
 
-		impulses []cp.Vector
-		thrust   cp.Vector
-		angle    float64
+		impulses  []cp.Vector
+		activated map[int]bool
+		thrust    cp.Vector
+		angle     float64
 
 		machine *Machine
 	}
@@ -87,6 +93,9 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 
 func (b *Bot) FrameReset() {
 	b.impulses = b.impulses[:0]
+	for i := range b.activated {
+		b.activated[i] = false
+	}
 }
 
 func (b *Bot) Reset() {
@@ -148,4 +157,47 @@ func (b *Bot) Execute() {
 		)
 		b.impulses = append(b.impulses, v)
 	}
+}
+
+func (b *Bot) DrawInfo(ui *UI, img *ebiten.Image) {
+	text.Draw(img,
+		fmt.Sprintf(`bot (%d)
+
+  Position: (%.2f, %.2f)
+  Heading: %d
+  Velocity: (%.2f, %.2f)
+  Speed: %.2f
+
+  Thrust Vector: (%.2f, %.2f)
+
+  Mass/Energy: %.2f / %.2f
+`, b.id,
+			b.Position().X, b.Position().Y,
+			int(b.angle*180/math.Pi)%360,
+			b.Velocity().X, b.Velocity().Y,
+			b.Velocity().Length(),
+
+			b.thrust.X, b.thrust.Y,
+
+			b.Mass(), b.Mass()*b.leonhardEfficiency(),
+		),
+		ui.game.assets.font,
+		24, 80,
+		color.White)
+
+	text.Draw(img,
+		"Machine",
+		ui.game.assets.font,
+		24, 240,
+		color.White)
+	var buf strings.Builder
+	buf.WriteString("  Registers\n\n")
+	for i, v := range b.machine.registers {
+		buf.WriteString(fmt.Sprintf("  %2d  % 6d\n", i, v))
+	}
+	text.Draw(img,
+		buf.String(),
+		ui.game.assets.font,
+		24, 260,
+		color.White)
 }

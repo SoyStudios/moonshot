@@ -8,19 +8,48 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text"
 )
 
-type UI struct {
-	game *Game
+type (
+	UI struct {
+		game *Game
 
-	layer *ebiten.Image
+		layer *ebiten.Image
 
-	bot *Bot
-}
+		info InfoDrawer
+	}
+
+	UIUpdater interface {
+		Update()
+	}
+
+	InfoDrawer interface {
+		DrawInfo(*UI, *ebiten.Image)
+	}
+)
 
 func NewUI(g *Game) *UI {
 	return &UI{
 		game:  g,
 		layer: ebiten.NewImage(g.w, g.h),
 	}
+}
+
+func (u *UI) Draw(screen *ebiten.Image) {
+	u.layer.Fill(color.RGBA{255, 255, 255, 0})
+
+	op := &ebiten.DrawImageOptions{}
+
+	if u.info != nil {
+		op.GeoM.Translate(float64(u.game.w)/3*2, 0)
+		info := u.InfoScreen()
+		u.info.DrawInfo(u, info)
+		u.layer.DrawImage(info, op)
+	}
+
+	op.GeoM.Reset()
+	screen.DrawImage(u.layer, op)
+}
+
+func (u *UI) Update() {
 }
 
 func (u *UI) uiImg(name string) *ebiten.Image {
@@ -130,15 +159,4 @@ func (u *UI) InfoScreen() *ebiten.Image {
 		color.White,
 	)
 	return infoScreen
-}
-
-func (u *UI) Draw(screen *ebiten.Image) {
-	u.layer.Fill(color.RGBA{255, 255, 255, 0})
-
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(u.game.w)/3*2, 0)
-	u.layer.DrawImage(u.InfoScreen(), op)
-
-	op.GeoM.Reset()
-	screen.DrawImage(u.layer, op)
 }
