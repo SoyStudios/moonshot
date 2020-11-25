@@ -24,6 +24,8 @@ type (
 		registers [16]int16
 
 		state State
+
+		activated map[int]bool
 	}
 
 	runFunc func(*Machine, []int16, func())
@@ -92,6 +94,8 @@ func NewMachine() *Machine {
 	m := &Machine{
 		run:   runInstruction,
 		stack: stackPool.Get().(*stack),
+
+		activated: make(map[int]bool),
 	}
 	return m
 }
@@ -103,17 +107,17 @@ func (m *Machine) Destroy() {
 
 func (m *Machine) Run() {
 	m.state.Reset()
-	for _, g := range m.program {
-		m.RunGene(g)
+	for i, g := range m.program {
+		m.activated[i] = m.RunGene(g)
 	}
 	m.state.Execute()
 }
 
-func (m *Machine) RunGene(g *Gene) {
+func (m *Machine) RunGene(g *Gene) bool {
 	m.pc = 0
 	m.stack.Reset()
 	if len(g.Evaluate) == 0 {
-		return
+		return false
 	}
 	for {
 		inst := Translate(Token(g.Evaluate[m.pc]))
@@ -124,14 +128,14 @@ func (m *Machine) RunGene(g *Gene) {
 		}
 	}
 	if len(*m.stack) <= 0 {
-		return
+		return false
 	}
 	if m.stack.Pop() < 1 {
-		return
+		return false
 	}
 
 	if len(g.Execute) == 0 {
-		return
+		return true
 	}
 	m.pc = 0
 	m.stack.Reset()
@@ -142,6 +146,13 @@ func (m *Machine) RunGene(g *Gene) {
 		if m.pc > len(g.Execute)-1 {
 			break
 		}
+	}
+	return true
+}
+
+func (m *Machine) FrameReset() {
+	for i := range m.activated {
+		m.activated[i] = false
 	}
 }
 

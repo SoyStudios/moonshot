@@ -35,10 +35,9 @@ type (
 		// scan FOV in degrees
 		scanFOV func() float64
 
-		impulses  []cp.Vector
-		activated map[int]bool
-		thrust    cp.Vector
-		angle     float64
+		impulses []cp.Vector
+		thrust   cp.Vector
+		angle    float64
 
 		machine *Machine
 	}
@@ -93,9 +92,6 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 
 func (b *Bot) FrameReset() {
 	b.impulses = b.impulses[:0]
-	for i := range b.activated {
-		b.activated[i] = false
-	}
 }
 
 func (b *Bot) Reset() {
@@ -200,4 +196,30 @@ func (b *Bot) DrawInfo(ui *UI, img *ebiten.Image) {
 		ui.game.assets.font,
 		24, 260,
 		color.White)
+
+	text.Draw(img,
+		"Genes",
+		ui.game.assets.font,
+		200, 260,
+		color.White)
+	white := ebiten.NewImage(8, 5)
+	white.Fill(color.White)
+	green := ebiten.NewImage(8, 5)
+	green.Fill(color.RGBA{0, 255, 0, 255})
+	var row, col int
+	op := &ebiten.DrawImageOptions{}
+	for i := range b.machine.program {
+		if i%10 == 0 {
+			row++
+			col = 0
+		}
+		op.GeoM.Reset()
+		op.GeoM.Translate(200+(float64(col)*10), 265+(float64(row)*8))
+		if b.machine.activated[i] {
+			img.DrawImage(green, op)
+		} else {
+			img.DrawImage(white, op)
+		}
+		col++
+	}
 }
