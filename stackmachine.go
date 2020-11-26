@@ -30,18 +30,6 @@ type (
 
 	runFunc func(*Machine, []int16, func())
 
-	// Gene represents one gene of the bot's program.
-	//
-	// A Gene consists of two sections, an evaluation
-	// and an execution section.
-	// By the end of the evaluation section, the stack
-	// will be popped. If the value is > 0 the execution
-	// section will be executed.
-	Gene struct {
-		Evaluate []int16
-		Execute  []int16
-	}
-
 	State interface {
 		// Reset resets the bot for each cycle
 		// Accumulated values (such as thrust vector) are reset
@@ -148,12 +136,6 @@ func (m *Machine) RunGene(g *Gene) bool {
 		}
 	}
 	return true
-}
-
-func (m *Machine) FrameReset() {
-	for i := range m.activated {
-		m.activated[i] = false
-	}
 }
 
 func runInstruction(m *Machine, code []int16, f func()) {

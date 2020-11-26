@@ -15,6 +15,7 @@ type (
 		layer *ebiten.Image
 
 		info InfoDrawer
+		code CodeDrawer
 	}
 
 	UIUpdater interface {
@@ -23,6 +24,10 @@ type (
 
 	InfoDrawer interface {
 		DrawInfo(*UI, *ebiten.Image)
+	}
+
+	CodeDrawer interface {
+		DrawCode(*UI, *ebiten.Image)
 	}
 )
 
@@ -39,10 +44,18 @@ func (u *UI) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 
 	if u.info != nil {
+		op.GeoM.Reset()
 		op.GeoM.Translate(float64(u.game.w)/3*2, 0)
 		info := u.InfoScreen()
 		u.info.DrawInfo(u, info)
 		u.layer.DrawImage(info, op)
+	}
+
+	if u.code != nil {
+		op.GeoM.Reset()
+		code := u.CodeScreen()
+		u.code.DrawCode(u, code)
+		u.layer.DrawImage(code, op)
 	}
 
 	op.GeoM.Reset()
@@ -72,6 +85,10 @@ func (u *UI) uiImg(name string) *ebiten.Image {
 		return u.game.assets.ui.SubImage(image.Rect(459, 388, 459+24, 388+72)).(*ebiten.Image)
 	case "blueScreenPanelBottomRight":
 		return u.game.assets.ui.SubImage(image.Rect(702, 388, 702+24, 388+72)).(*ebiten.Image)
+
+	case "yellowScreenPanelTopLeft":
+		return u.game.assets.ui.SubImage(image.Rect(774, 186, 774+72, 186+72)).(*ebiten.Image)
+
 	case "blank72":
 		img := ebiten.NewImage(72, 72)
 		img.Fill(color.CMYK{0, 255, 0, 0})
@@ -159,4 +176,22 @@ func (u *UI) InfoScreen() *ebiten.Image {
 		color.White,
 	)
 	return infoScreen
+}
+
+func (u *UI) CodeScreen() *ebiten.Image {
+	codeScreen := ebiten.NewImage(u.game.w/3, u.game.h)
+	// w, h := codeScreen.Size()
+	op := &ebiten.DrawImageOptions{}
+	codeScreen.DrawImage(
+		u.uiImg("yellowScreenPanelTopLeft"),
+		op,
+	)
+
+	text.Draw(codeScreen,
+		"Gene",
+		u.game.assets.font,
+		24, 24,
+		color.White,
+	)
+	return codeScreen
 }
