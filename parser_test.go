@@ -46,7 +46,7 @@ END
 	}
 
 	m := NewMachine()
-	m.run = runInstruction
+	m.run = runInstructionDebug
 	m.program = program
 	stateMock := &StateMock{}
 	m.state = stateMock

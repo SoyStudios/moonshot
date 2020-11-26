@@ -18,10 +18,6 @@ type (
 		code CodeDrawer
 	}
 
-	UIUpdater interface {
-		Update()
-	}
-
 	InfoDrawer interface {
 		DrawInfo(*UI, *ebiten.Image)
 	}

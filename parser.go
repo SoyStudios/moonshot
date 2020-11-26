@@ -236,7 +236,7 @@ func (p *Parser) Parse() ([]*Gene, error) {
 		}
 		p.unscan()
 
-		g := &Gene{Evaluate: make([]int16, 0), Execute: make([]int16, 0)}
+		g := NewGene()
 
 		// begin evaluate
 		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
@@ -249,9 +249,6 @@ func (p *Parser) Parse() ([]*Gene, error) {
 			tok, _ := p.scanIgnoreWhitespace()
 			if tok == END {
 				break
-			}
-			if tok == COMMENT {
-				continue
 			}
 			inst := Translate(tok)
 			err := inst.Parse(p, &g.Evaluate)
@@ -271,9 +268,6 @@ func (p *Parser) Parse() ([]*Gene, error) {
 			tok, _ := p.scanIgnoreWhitespace()
 			if tok == END {
 				break
-			}
-			if tok == COMMENT {
-				continue
 			}
 			inst := Translate(tok)
 			err := inst.Parse(p, &g.Execute)

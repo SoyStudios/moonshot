@@ -17,12 +17,19 @@ type (
 	// will be popped. If the value is > 0 the execution
 	// section will be executed.
 	Gene struct {
-		Evaluate []int16
-		Execute  []int16
+		Evaluate AST
+		Execute  AST
 	}
 
 	GeneDrawer func(*UI, *ebiten.Image)
 )
+
+func NewGene() *Gene {
+	return &Gene{
+		Evaluate: make([]Instruction, 0),
+		Execute:  make([]Instruction, 0),
+	}
+}
 
 func (d GeneDrawer) DrawCode(ui *UI, img *ebiten.Image) {
 	d(ui, img)

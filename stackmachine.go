@@ -28,7 +28,7 @@ type (
 		activated map[int]bool
 	}
 
-	runFunc func(*Machine, []int16, func())
+	runFunc func(*Machine, AST, func())
 
 	State interface {
 		// Reset resets the bot for each cycle
@@ -108,7 +108,7 @@ func (m *Machine) RunGene(g *Gene) bool {
 		return false
 	}
 	for {
-		inst := Translate(Token(g.Evaluate[m.pc]))
+		inst := g.Evaluate[m.pc]
 		inst.Run(m, g.Evaluate)
 		m.pc++
 		if m.pc > len(g.Evaluate)-1 {
@@ -128,7 +128,7 @@ func (m *Machine) RunGene(g *Gene) bool {
 	m.pc = 0
 	m.stack.Reset()
 	for {
-		inst := Translate(Token(g.Execute[m.pc]))
+		inst := g.Execute[m.pc]
 		inst.Run(m, g.Execute)
 		m.pc++
 		if m.pc > len(g.Execute)-1 {
@@ -138,15 +138,15 @@ func (m *Machine) RunGene(g *Gene) bool {
 	return true
 }
 
-func runInstruction(m *Machine, code []int16, f func()) {
+func runInstruction(m *Machine, code AST, f func()) {
 	f()
 }
 
-func runInstructionDebug(m *Machine, code []int16, f func()) {
+func runInstructionDebug(m *Machine, code AST, f func()) {
 	fmt.Printf("%v\n", code)
 	fmt.Println("pc", m.pc)
-	inst := Translate(Token(code[m.pc]))
-	fmt.Printf("%s\n", inst.String(m, code))
+	inst := code[m.pc]
+	fmt.Printf("%s\n", inst)
 	fmt.Println("exec")
 
 	f()
@@ -156,7 +156,7 @@ func runInstructionDebug(m *Machine, code []int16, f func()) {
 
 func runWithBreak(breakpoint int, breakFunc func(m *Machine) bool, runFunc runFunc) runFunc {
 	var ran bool
-	return func(m *Machine, code []int16, f func()) {
+	return func(m *Machine, code AST, f func()) {
 		if !ran && m.pc == breakpoint {
 			ran = true
 			if !breakFunc(m) {
