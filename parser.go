@@ -145,6 +145,8 @@ func (s *Scanner) scanIdent() (tok Token, lit string) {
 		return CON, buf.String()
 	case "REG":
 		return REG, buf.String()
+	case "RMT":
+		return RMT, buf.String()
 
 	case "GEQ":
 		return GEQ, buf.String()
@@ -190,6 +192,8 @@ func (s *Scanner) scanIdent() (tok Token, lit string) {
 		return MNE, buf.String()
 	case "REP":
 		return REP, buf.String()
+	case "IMP":
+		return IMP, buf.String()
 
 	default:
 		return LITERAL, buf.String()
@@ -242,9 +246,7 @@ func (p *Parser) Parse() ([]*Gene, error) {
 		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
 			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
 		}
-		if tok, lit := p.scanIgnoreWhitespace(); tok != EV {
-			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting evaluation section", tok, lit)
-		}
+		p.unscan()
 		for {
 			tok, _ := p.scanIgnoreWhitespace()
 			if tok == END {
@@ -261,9 +263,7 @@ func (p *Parser) Parse() ([]*Gene, error) {
 		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
 			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
 		}
-		if tok, lit := p.scanIgnoreWhitespace(); tok != EX {
-			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting execution section", tok, lit)
-		}
+		p.unscan()
 		for {
 			tok, _ := p.scanIgnoreWhitespace()
 			if tok == END {

@@ -29,6 +29,7 @@ const (
 
 	CON Token = 128 // Constant identifier
 	REG Token = 129 // Register identifier
+	RMT Token = 130 // Remote register identifier
 
 	// comparison
 	// x COMP y, where x was pushed before y
@@ -55,6 +56,7 @@ const (
 	TRN Token = 1027 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
 	MNE Token = 1028 // Pop and mine with strength x
 	REP Token = 1029 // Pop and reproduce using x energy
+	IMP Token = 1030 // Pop x and thrust for strength x for current heading
 )
 
 type (
@@ -75,6 +77,8 @@ func Translate(token Token) Instruction {
 		return &Nop{}
 	case COMMENT:
 		return &Comment{}
+	case BEGIN:
+		return &Begin{}
 
 	case RDX:
 		return &ReadX{}
@@ -132,6 +136,8 @@ func Translate(token Token) Instruction {
 		return &Mine{}
 	case REP:
 		return &Reproduce{}
+	case IMP:
+		return &Impulse{}
 
 	case ILLEGAL:
 		fallthrough
@@ -179,6 +185,8 @@ func (t Token) String() string {
 		return "CON"
 	case REG:
 		return "REG"
+	case RMT:
+		return "RMT"
 
 	case GEQ:
 		return "GEQ"
@@ -224,6 +232,8 @@ func (t Token) String() string {
 		return "MNE"
 	case REP:
 		return "REP"
+	case IMP:
+		return "IMP"
 
 	case ILLEGAL:
 		fallthrough
@@ -244,6 +254,26 @@ func (i Illegal) Parse(p *Parser, _ *AST) error {
 	p.unscan()
 	tok, lit := p.scanIgnoreWhitespace()
 	return fmt.Errorf("cannot parse illegal token %s (\"%s\")", tok, lit)
+}
+
+type Begin struct {
+	Section Token
+}
+
+func (b Begin) String() string {
+	return fmt.Sprintf("%s %s", BEGIN, b.Section)
+}
+func (b Begin) Run(m *Machine, code AST) {
+	m.run(m, code, func() {})
+}
+func (b *Begin) Parse(p *Parser, program *AST) error {
+	tok, lit := p.scanIgnoreWhitespace()
+	if tok != EV && tok != EX {
+		return fmt.Errorf("unexpected token %s (\"%s\"). Expecting %s or %s", tok, lit, EV, EX)
+	}
+	b.Section = tok
+	*program = append(*program, b)
+	return nil
 }
 
 type Nop struct{}
@@ -771,6 +801,25 @@ func (e Thrust) Run(m *Machine, code AST) {
 }
 func (e *Thrust) Parse(p *Parser, program *AST) error {
 	*program = append(*program, e)
+	return nil
+}
+
+type Impulse struct{}
+
+func (i Impulse) String() string {
+	return IMP.String()
+}
+func (i Impulse) Run(m *Machine, code AST) {
+	m.run(m, code, func() {
+		if len(*m.stack) <= 0 {
+			return
+		}
+		x := m.stack.Pop()
+		m.state.Impulse(x)
+	})
+}
+func (i *Impulse) Parse(p *Parser, program *AST) error {
+	*program = append(*program, i)
 	return nil
 }
 

@@ -136,6 +136,7 @@ BEGIN EX
 	PSH CON 3
 	DIV
 	REP
+	IMP
 END
 	`
 	p := NewParser(strings.NewReader(code))
@@ -179,6 +180,7 @@ END
 	stateMock.On("Turn", int16(-420))
 	stateMock.On("Mine", int16(3))
 	stateMock.On("Reproduce", int16(4))
+	stateMock.On("Impulse", int16(-42))
 
 	m.Run()
 

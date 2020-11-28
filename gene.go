@@ -35,7 +35,7 @@ func (d GeneDrawer) DrawCode(ui *UI, img *ebiten.Image) {
 	d(ui, img)
 }
 
-func GeneDraweFor(i int, g *Gene) GeneDrawer {
+func GeneDrawerFor(i int, g *Gene) GeneDrawer {
 	return func(ui *UI, img *ebiten.Image) {
 		text.Draw(img,
 			fmt.Sprintf(`Gene (%d)

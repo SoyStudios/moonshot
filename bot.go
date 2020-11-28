@@ -141,6 +141,12 @@ func (b *Bot) Mine(strength int16) {
 func (b *Bot) Reproduce(energy int16) {
 }
 
+func (b *Bot) Impulse(strength int16) {
+	v := cp.ForAngle(b.angle)
+	v.Clamp(float64(strength))
+	b.thrust = b.thrust.Add(v)
+}
+
 func (b *Bot) Execute() {
 	if b.thrust.X != 0 || b.thrust.Y != 0 {
 		// apply thrust

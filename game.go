@@ -258,7 +258,7 @@ END
 	b.machine.program = program
 	g.bots = append(g.bots, b)
 	g.ui.info = b
-	g.ui.code = GeneDraweFor(0, b.machine.program[0])
+	g.ui.code = GeneDrawerFor(0, b.machine.program[0])
 
 	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {

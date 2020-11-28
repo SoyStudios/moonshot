@@ -61,3 +61,7 @@ func (s *StateMock) Mine(a int16) {
 func (s *StateMock) Reproduce(a int16) {
 	s.Called(a)
 }
+
+func (s *StateMock) Impulse(x int16) {
+	s.Called(x)
+}

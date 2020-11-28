@@ -51,6 +51,7 @@ type (
 		Turn(int16)
 		Mine(int16)
 		Reproduce(int16)
+		Impulse(int16)
 	}
 )
 
