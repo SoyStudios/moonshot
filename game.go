@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	SHAPE_GROUP_BOT = 1 << iota
+	SHAPE_CATEGORY_ANY = 1 << iota
+	SHAPE_CATEGORY_BOT
+	SHAPE_CATEGORY_ASTEROID
 )
 
 const baseZoomFactor = 1.01

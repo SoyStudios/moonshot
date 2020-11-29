@@ -67,10 +67,18 @@ func (u *UI) Update() {
 	}
 	x, y := u.game.camera.ScreenToWorld(ebiten.CursorPosition())
 	log.Printf("click %.2f,%.2f", x, y)
+	log.Printf("filter: %v", u.game.bots[2].Shape.Filter.Reject(cp.ShapeFilter{
+		Categories: SHAPE_CATEGORY_ANY,
+		Mask:       SHAPE_CATEGORY_BOT,
+	}))
 	info := u.game.space.PointQueryNearest(cp.Vector{X: x, Y: y}, 5,
-		cp.ShapeFilter{},
+		cp.ShapeFilter{
+			Categories: SHAPE_CATEGORY_ANY,
+			Mask:       SHAPE_CATEGORY_BOT,
+		},
 	)
 	log.Printf("query: %+v", info)
+	log.Printf("query: %+v", SHAPE_CATEGORY_BOT)
 	if info == nil || info.Shape == nil {
 		return
 	}

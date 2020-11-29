@@ -88,8 +88,10 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 	b.Shape.SetElasticity(0)
 	b.Shape.SetFriction(0)
 	b.Shape.UserData = b
-	b.Shape.Filter.Group = SHAPE_GROUP_BOT
+	b.Shape.Filter.Categories = SHAPE_CATEGORY_BOT
 	sp.AddShape(b.Shape)
+
+	log.Printf("space: %t", sp.ContainsShape(b.Shape))
 
 	b.Body.UserData = b
 
