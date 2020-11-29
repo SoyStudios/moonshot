@@ -155,56 +155,6 @@ BEGIN EX
 END
 
 BEGIN EV
-	RDX
-	RDY
-	ABS
-	PSH CON 100
-	LST
-END
-BEGIN EX
-	PSH CON 50
-	PSH CON 50
-	THR
-	PSH CON 1
-	POP REG 0
-END
-
-BEGIN EV
-	PSH REG 0
-END
-BEGIN EX
-	PSH CON 50
-	NEG
-	PSH CON 50
-	THR
-END
-
-BEGIN EV
-	RDX
-	RDY
-	ABS
-	PSH CON 150
-	GEQ
-END
-BEGIN EX
-	PSH CON 0
-	POP REG 0
-	PSH CON 1
-	POP REG 1 
-END
-
-BEGIN EV
-	PSH REG 1
-END
-BEGIN EX
-	PSH CON 50
-	NEG
-	PSH CON 50
-	NEG
-	THR
-END
-
-BEGIN EV
 	// If total velocity is >= 200
 	RDX
 	RDY
@@ -223,28 +173,68 @@ BEGIN EX
 	THR
 END
 
+// Counter for turning
+// Register 0 holds counter
 BEGIN EV
-	// if reg2 < 1
-	PSH REG 2
-	PSH CON 1
-	LST
+	// If reg0 <= 80
+	PSH REG 0
+	PSH CON 80
+	LEQ
 END
 BEGIN EX
+	// reg0++
+	PSH REG 0
 	PSH CON 1
-	POP REG 2
-	PSH CON 10
-	POP REG 3
+	ADD
+	POP REG 0
 END
 
+// Turning every 80 ticks
 BEGIN EV
-	// if reg2 >= 1
-	PSH REG 2
-	PSH CON 1
-	GEQ
+	// if reg0 > 80
+	PSH REG 0
+	PSH CON 80
+	GRT
 END
 BEGIN EX
-	PSH REG 3
+	// reset reg0 to 0
+	// turn by 10 degrees
+	PSH CON 0
+	POP REG 0
+	PSH CON 10
 	TRN
+	PSH CON 500
+	IMP
+END
+
+// Create impulse every 20 ticks
+// counter in reg1
+BEGIN EV
+	// if reg1 <= 20
+	PSH REG 1
+	PSH CON 20
+	LEQ
+END
+BEGIN EX
+	// reg1++
+	PSH REG 1
+	PSH CON 1
+	ADD
+	POP REG 1
+END
+
+// Create impulse in current direction
+BEGIN EV
+	// if reg1 > 20
+	PSH REG 1
+	PSH CON 20
+	GRT
+END
+BEGIN EX
+	PSH CON 500
+	IMP
+	PSH CON 0
+	POP REG 1
 END
 	`
 	p := NewParser(strings.NewReader(code))
@@ -423,26 +413,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.camera.Render(g.world, screen)
 
-	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
-	ebitenutil.DebugPrint(
-		screen,
-		fmt.Sprintf("TPS: %0.2f, C: %d\nB: %.2f,%.2f, M: %.2f, BA: %.2f, BAV: %.2f",
-			ebiten.CurrentTPS(), g.cyclesPerTick,
-			g.bots[2].Velocity().X, g.bots[2].Velocity().Y,
-			math.Sqrt(math.Pow(g.bots[2].Velocity().X, 2)+math.Pow(g.bots[2].Velocity().Y, 2)),
-			180/math.Pi*g.bots[2].Angle(), g.bots[2].AngularVelocity(),
-		),
-	)
-
 	g.ui.Draw(screen)
 
+	// debug info
+	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
 	ebitenutil.DebugPrintAt(
 		screen,
-		fmt.Sprintf("%s\nCursor World Pos: %.2f,%.2f",
+		fmt.Sprintf("TPS: %0.2f, C: %d\n%s\nCursor World Pos: %.2f,%.2f",
+			ebiten.CurrentTPS(), g.cyclesPerTick,
 			g.camera.String(),
 			worldX, worldY,
 		),
-		0, g.h-48,
+		0, g.h-72,
 	)
 }
 

@@ -129,10 +129,10 @@ func (b *Bot) Thrust(x, y int16) {
 
 func (b *Bot) Turn(a int16) {
 	angle := float64(a) / 180 * math.Pi
-	log.Printf("ad: %d, av: %.2f\n",
-		a, angle,
-	)
 	b.angle += angle
+	log.Printf("ad: %d, av: %.2f, a: %.2f\n",
+		a, angle, b.angle,
+	)
 }
 
 func (b *Bot) Mine(strength int16) {
@@ -143,7 +143,8 @@ func (b *Bot) Reproduce(energy int16) {
 
 func (b *Bot) Impulse(strength int16) {
 	v := cp.ForAngle(b.angle)
-	v.Clamp(float64(strength))
+	v = v.Mult(float64(strength))
+	log.Printf("imp: %.2f, %2.f\n", v.X, v.Y)
 	b.thrust = b.thrust.Add(v)
 }
 
