@@ -15,7 +15,7 @@ import (
 type (
 	Bot struct {
 		*cp.Body
-		shape *cp.Shape
+		*cp.Shape
 		space *cp.Space
 
 		id int16
@@ -81,13 +81,23 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 
 		machine: NewMachine(),
 	}
+	// connect machine state interface
 	b.machine.state = b
-	b.shape = cp.NewCircle(b.Body, 8, cp.Vector{})
-	b.shape.SetElasticity(0)
-	b.shape.SetFriction(0)
-	sp.AddShape(b.shape)
+	// create shape
+	b.Shape = cp.NewCircle(b.Body, 8, cp.Vector{})
+	b.Shape.SetElasticity(0)
+	b.Shape.SetFriction(0)
+	sp.AddShape(b.Shape)
 
 	return b
+}
+
+func (b *Bot) Mass() float64 {
+	return b.Body.Mass()
+}
+
+func (b *Bot) CenterOfGravity() cp.Vector {
+	return b.Body.CenterOfGravity()
 }
 
 func (b *Bot) FrameReset() {
