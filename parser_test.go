@@ -247,3 +247,44 @@ END
 		return
 	}
 }
+
+func TestCommentBeforeBeginIsAllowed(t *testing.T) {
+	code := `
+// This comment should be allowed
+BEGIN EV
+	PSH CON 1
+END
+BEGIN EX
+END
+`
+	p := NewParser(strings.NewReader(code))
+	program, err := p.Parse()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+		return
+	}
+	comment, ok := program[0].Evaluate[0].(*Comment)
+	if !ok {
+		t.Errorf("unexpected type %T", program[0].Evaluate[0].(*Comment))
+		return
+	}
+	if !assert.Equal(t, "// This comment should be allowed", comment.Lit) {
+		return
+	}
+}
+
+func TestHandlePrematureEOFWhenParsing(t *testing.T) {
+	code := `
+BEGIN EV
+	PSH CON 1
+END
+BEGIN EX
+	PSH CON 2
+`
+	p := NewParser(strings.NewReader(code))
+	_, err := p.Parse()
+	if err == nil {
+		t.Error("expect error on parse")
+		return
+	}
+}
