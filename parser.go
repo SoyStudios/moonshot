@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var eof = rune(0)
@@ -65,6 +67,7 @@ func (s *Scanner) Scan() (tok Token, lit string) {
 }
 
 func (s *Scanner) scanComment() (tok Token, lit string) {
+	s.unread()
 	var buf bytes.Buffer
 	buf.WriteRune(s.read())
 
@@ -232,6 +235,39 @@ func (p *Parser) scanIgnoreWhitespace() (tok Token, lit string) {
 	return
 }
 
+func (p *Parser) parseSection(section *AST, require Token) error {
+	for {
+		tok, _ := p.scanIgnoreWhitespace()
+		if tok == EOF {
+			return fmt.Errorf("unexpected %s in evaluation section", EOF)
+		}
+		if tok == END {
+			break
+		}
+		inst := Translate(tok)
+		err := inst.Parse(p, section)
+		if err != nil {
+			return err
+		}
+	}
+	// section can start with comments and must start with a BEGIN
+	for _, inst := range *section {
+		_, ok := inst.(*Comment)
+		if ok {
+			continue
+		}
+		begin, ok := inst.(*Begin)
+		if !ok {
+			return fmt.Errorf("unexpected instruction %s. Expect %s", inst, BEGIN)
+		}
+		if begin.Section != require {
+			return fmt.Errorf("unexpected section %s. Expect %s.", begin.Section, require)
+		}
+		break
+	}
+	return nil
+}
+
 func (p *Parser) Parse() ([]*Gene, error) {
 	pr := make([]*Gene, 0)
 	for {
@@ -242,38 +278,13 @@ func (p *Parser) Parse() ([]*Gene, error) {
 
 		g := NewGene()
 
-		// begin evaluate
-		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
-			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
+		err := p.parseSection(&g.Evaluate, EV)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing evaluation section")
 		}
-		p.unscan()
-		for {
-			tok, _ := p.scanIgnoreWhitespace()
-			if tok == END {
-				break
-			}
-			inst := Translate(tok)
-			err := inst.Parse(p, &g.Evaluate)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// begin execute
-		if tok, lit := p.scanIgnoreWhitespace(); tok != BEGIN {
-			return nil, fmt.Errorf("unexpected token %s (\"%s\"), expecting BEGIN", tok, lit)
-		}
-		p.unscan()
-		for {
-			tok, _ := p.scanIgnoreWhitespace()
-			if tok == END {
-				break
-			}
-			inst := Translate(tok)
-			err := inst.Parse(p, &g.Execute)
-			if err != nil {
-				return nil, err
-			}
+		err = p.parseSection(&g.Execute, EX)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing execution section")
 		}
 		pr = append(pr, g)
 	}
