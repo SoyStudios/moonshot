@@ -13,6 +13,10 @@ import (
 	"github.com/jakecoffman/cp"
 )
 
+const (
+	SHAPE_GROUP_BOT = 1 << iota
+)
+
 const baseZoomFactor = 1.01
 
 type (
@@ -70,15 +74,6 @@ func (c *camera) viewportCenter() cp.Vector {
 	}
 }
 
-func (c *camera) worldMatrix() ebiten.GeoM {
-	m := ebiten.GeoM{}
-	// We want to scale and rotate around center of image / screen
-	m.Translate(-c.viewportCenter().X, -c.viewportCenter().Y)
-	m.Rotate(float64(c.rotation) * 2 * math.Pi / 360)
-	m.Translate(c.viewportCenter().X, c.viewportCenter().Y)
-	return m
-}
-
 // worldObjectMatrix returns a matrix used to place an object
 // onto the world on coordinates x, y
 func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
@@ -92,9 +87,7 @@ func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
 }
 
 func (c *camera) Render(world, screen *ebiten.Image) {
-	screen.DrawImage(world, &ebiten.DrawImageOptions{
-		GeoM: c.worldMatrix(),
-	})
+	screen.DrawImage(world, &ebiten.DrawImageOptions{})
 }
 
 // WorldToScreen translates world coordinates (such as positions of bots
@@ -106,8 +99,7 @@ func (c *camera) WorldToScreen(x, y float64) (float64, float64) {
 }
 
 func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
-	inverseMatrix := c.worldMatrix()
-	inverseMatrix.Translate(-c.Position.X, -c.Position.Y)
+	inverseMatrix := c.worldObjectMatrix(0, 0)
 	if inverseMatrix.IsInvertible() {
 		inverseMatrix.Invert()
 		return inverseMatrix.Apply(float64(posX), float64(posY))

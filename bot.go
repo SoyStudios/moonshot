@@ -87,7 +87,11 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 	b.Shape = cp.NewCircle(b.Body, 8, cp.Vector{})
 	b.Shape.SetElasticity(0)
 	b.Shape.SetFriction(0)
+	b.Shape.UserData = b
+	b.Shape.Filter.Group = SHAPE_GROUP_BOT
 	sp.AddShape(b.Shape)
+
+	b.Body.UserData = b
 
 	return b
 }

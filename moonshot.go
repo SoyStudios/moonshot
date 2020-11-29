@@ -45,7 +45,7 @@ func runMain() int {
 	ebiten.SetFullscreen(true)
 	g.cyclesPerTick = 1
 	g.camera = &camera{
-		Position: cp.Vector{X: 100, Y: 100},
+		Position: cp.Vector{X: 0, Y: 0},
 		ViewPort: cp.Vector{
 			X: float64(g.w),
 			Y: float64(g.h),

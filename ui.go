@@ -3,9 +3,12 @@ package main
 import (
 	"image"
 	"image/color"
+	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"github.com/jakecoffman/cp"
 )
 
 type (
@@ -59,6 +62,23 @@ func (u *UI) Draw(screen *ebiten.Image) {
 }
 
 func (u *UI) Update() {
+	if !inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		return
+	}
+	x, y := u.game.camera.ScreenToWorld(ebiten.CursorPosition())
+	log.Printf("click %.2f,%.2f", x, y)
+	info := u.game.space.PointQueryNearest(cp.Vector{X: x, Y: y}, 5,
+		cp.ShapeFilter{},
+	)
+	log.Printf("query: %+v", info)
+	if info == nil || info.Shape == nil {
+		return
+	}
+	bot, ok := info.Shape.UserData.(*Bot)
+	if !ok {
+		return
+	}
+	u.info = bot
 }
 
 func (u *UI) uiImg(name string) *ebiten.Image {
