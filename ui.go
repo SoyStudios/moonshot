@@ -3,7 +3,6 @@ package main
 import (
 	"image"
 	"image/color"
-	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -93,7 +92,6 @@ func (u *UI) Update() {
 		fx, fy, fw, fh := u.FollowButtonDims()
 		fx += u.infoBaseX
 		fy += u.infoBaseY
-		log.Printf("click %d,%d, w,h: %d,%d, x,y: %.2f,%.2f", cursorX, cursorY, fw, fh, fx, fy)
 		if cursorX >= int(fx) && cursorX < int(fx)+fw &&
 			cursorY >= int(fy) && cursorY < int(fy)+fh {
 			if pos, ok := u.info.(Positioner); ok {

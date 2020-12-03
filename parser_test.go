@@ -241,7 +241,6 @@ END
 	stateMock.On("Thrust", int16(-42), int16(-420))
 
 	m.Run()
-	t.Logf("%v", program)
 
 	if !stateMock.AssertExpectations(t) {
 		return

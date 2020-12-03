@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"image/color"
-	"log"
 	"math"
 	"strings"
 
@@ -91,8 +90,6 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 	b.Shape.Filter.Categories = SHAPE_CATEGORY_BOT
 	sp.AddShape(b.Shape)
 
-	log.Printf("space: %t", sp.ContainsShape(b.Shape))
-
 	b.Body.UserData = b
 
 	return b
@@ -146,9 +143,6 @@ func (b *Bot) Thrust(x, y int16) {
 func (b *Bot) Turn(a int16) {
 	angle := float64(a) / 180 * math.Pi
 	b.angle += angle
-	log.Printf("ad: %d, av: %.2f, a: %.2f\n",
-		a, angle, b.angle,
-	)
 }
 
 func (b *Bot) Mine(strength int16) {
@@ -160,7 +154,6 @@ func (b *Bot) Reproduce(energy int16) {
 func (b *Bot) Impulse(strength int16) {
 	v := cp.ForAngle(b.angle)
 	v = v.Mult(float64(strength))
-	log.Printf("imp: %.2f, %2.f\n", v.X, v.Y)
 	b.thrust = b.thrust.Add(v)
 }
 
@@ -169,7 +162,6 @@ func (b *Bot) Execute() {
 		// apply thrust
 		v := b.thrust
 		v = v.Clamp(300)
-		log.Printf("exec thr: %.2f,%.2f\n", v.X, v.Y)
 		b.ApplyImpulseAtLocalPoint(
 			v,
 			b.CenterOfGravity(),
