@@ -31,16 +31,21 @@ func runMain() int {
 		"level", "error",
 		"caller", log.DefaultCaller,
 	)
+	// window
 	w, h := ebiten.ScreenSizeInFullscreen()
 	ratio := float64(w) / float64(h)
 	g := &Game{p: &Player{}}
 	g.w = windowWidth
 	g.h = int(float64(g.w) / ratio)
 	ebiten.SetWindowSize(g.w, g.h)
+	ebiten.SetWindowDecorated(false)
+	ebiten.SetWindowFloating(true)
+	ebiten.SetWindowResizable(false)
+
 	ebiten.SetFullscreen(true)
 	g.cyclesPerTick = 1
 	g.camera = &camera{
-		Position: cp.Vector{X: 100, Y: 100},
+		Position: cp.Vector{X: 0, Y: 0},
 		ViewPort: cp.Vector{
 			X: float64(g.w),
 			Y: float64(g.h),

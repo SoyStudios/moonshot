@@ -13,6 +13,12 @@ import (
 	"github.com/jakecoffman/cp"
 )
 
+const (
+	SHAPE_CATEGORY_ANY = 1 << iota
+	SHAPE_CATEGORY_BOT
+	SHAPE_CATEGORY_ASTEROID
+)
+
 const baseZoomFactor = 1.01
 
 type (
@@ -37,6 +43,10 @@ type (
 
 		camera *camera
 
+		controls struct {
+			follow Positioner
+		}
+
 		cyclesPerTick int
 
 		space *cp.Space
@@ -54,6 +64,10 @@ type (
 
 		p *Player
 	}
+
+	Positioner interface {
+		Position() cp.Vector
+	}
 )
 
 func (c *camera) String() string {
@@ -70,15 +84,6 @@ func (c *camera) viewportCenter() cp.Vector {
 	}
 }
 
-func (c *camera) worldMatrix() ebiten.GeoM {
-	m := ebiten.GeoM{}
-	// We want to scale and rotate around center of image / screen
-	m.Translate(-c.viewportCenter().X, -c.viewportCenter().Y)
-	m.Rotate(float64(c.rotation) * 2 * math.Pi / 360)
-	m.Translate(c.viewportCenter().X, c.viewportCenter().Y)
-	return m
-}
-
 // worldObjectMatrix returns a matrix used to place an object
 // onto the world on coordinates x, y
 func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
@@ -92,9 +97,7 @@ func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
 }
 
 func (c *camera) Render(world, screen *ebiten.Image) {
-	screen.DrawImage(world, &ebiten.DrawImageOptions{
-		GeoM: c.worldMatrix(),
-	})
+	screen.DrawImage(world, &ebiten.DrawImageOptions{})
 }
 
 // WorldToScreen translates world coordinates (such as positions of bots
@@ -106,8 +109,7 @@ func (c *camera) WorldToScreen(x, y float64) (float64, float64) {
 }
 
 func (c *camera) ScreenToWorld(posX, posY int) (float64, float64) {
-	inverseMatrix := c.worldMatrix()
-	inverseMatrix.Translate(-c.Position.X, -c.Position.Y)
+	inverseMatrix := c.worldObjectMatrix(0, 0)
 	if inverseMatrix.IsInvertible() {
 		inverseMatrix.Invert()
 		return inverseMatrix.Apply(float64(posX), float64(posY))
@@ -155,56 +157,6 @@ BEGIN EX
 END
 
 BEGIN EV
-	RDX
-	RDY
-	ABS
-	PSH CON 100
-	LST
-END
-BEGIN EX
-	PSH CON 50
-	PSH CON 50
-	THR
-	PSH CON 1
-	POP REG 0
-END
-
-BEGIN EV
-	PSH REG 0
-END
-BEGIN EX
-	PSH CON 50
-	NEG
-	PSH CON 50
-	THR
-END
-
-BEGIN EV
-	RDX
-	RDY
-	ABS
-	PSH CON 150
-	GEQ
-END
-BEGIN EX
-	PSH CON 0
-	POP REG 0
-	PSH CON 1
-	POP REG 1 
-END
-
-BEGIN EV
-	PSH REG 1
-END
-BEGIN EX
-	PSH CON 50
-	NEG
-	PSH CON 50
-	NEG
-	THR
-END
-
-BEGIN EV
 	// If total velocity is >= 200
 	RDX
 	RDY
@@ -223,28 +175,68 @@ BEGIN EX
 	THR
 END
 
+// Counter for turning
+// Register 0 holds counter
 BEGIN EV
-	// if reg2 < 1
-	PSH REG 2
-	PSH CON 1
-	LST
+	// If reg0 <= 80
+	PSH REG 0
+	PSH CON 80
+	LEQ
 END
 BEGIN EX
+	// reg0++
+	PSH REG 0
 	PSH CON 1
-	POP REG 2
-	PSH CON 10
-	POP REG 3
+	ADD
+	POP REG 0
 END
 
+// Turning every 80 ticks
 BEGIN EV
-	// if reg2 >= 1
-	PSH REG 2
-	PSH CON 1
-	GEQ
+	// if reg0 > 80
+	PSH REG 0
+	PSH CON 80
+	GRT
 END
 BEGIN EX
-	PSH REG 3
+	// reset reg0 to 0
+	// turn by 10 degrees
+	PSH CON 0
+	POP REG 0
+	PSH CON 10
 	TRN
+	PSH CON 500
+	IMP
+END
+
+// Create impulse every 20 ticks
+// counter in reg1
+BEGIN EV
+	// if reg1 <= 20
+	PSH REG 1
+	PSH CON 20
+	LEQ
+END
+BEGIN EX
+	// reg1++
+	PSH REG 1
+	PSH CON 1
+	ADD
+	POP REG 1
+END
+
+// Create impulse in current direction
+BEGIN EV
+	// if reg1 > 20
+	PSH REG 1
+	PSH CON 20
+	GRT
+END
+BEGIN EX
+	PSH CON 500
+	IMP
+	PSH CON 0
+	POP REG 1
 END
 	`
 	p := NewParser(strings.NewReader(code))
@@ -257,7 +249,10 @@ END
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
 	b.machine.program = program
 	g.bots = append(g.bots, b)
-	g.ui.bot = b
+	g.controls.follow = b
+
+	g.ui.info = b
+	g.ui.code = GeneDrawerFor(0, b.machine.program[0])
 
 	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {
@@ -297,31 +292,43 @@ func (g *Game) updateOnRepeatingKey(input string, f func()) {
 	}
 }
 
+func (g *Game) resetFollow() {
+	g.controls.follow = nil
+}
+
 // Update is the main update loop
 func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ErrExit
 	}
 
+	g.ui.Update()
+
 	// Camera controls
 	g.updateOnKey("zoomOut", func() {
+		g.resetFollow()
 		g.camera.zoomStep--
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	})
 	g.updateOnKey("zoomIn", func() {
+		g.resetFollow()
 		g.camera.zoomStep++
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	})
 	g.updateOnKey("up", func() {
+		g.resetFollow()
 		g.camera.Position.Y -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("down", func() {
+		g.resetFollow()
 		g.camera.Position.Y += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("left", func() {
+		g.resetFollow()
 		g.camera.Position.X -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("right", func() {
+		g.resetFollow()
 		g.camera.Position.X += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 
@@ -338,6 +345,11 @@ func (g *Game) Update() error {
 		return nil
 	}
 	g.step = 0
+
+	// follow
+	if g.controls.follow != nil {
+		g.camera.Position.X, g.camera.Position.Y = g.controls.follow.Position().X-g.camera.viewportCenter().X, g.controls.follow.Position().Y-g.camera.viewportCenter().Y
+	}
 
 	// Game speed controls
 	g.updateOnRepeatingKey("speedUp", func() {
@@ -420,26 +432,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.camera.Render(g.world, screen)
 
-	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
-	ebitenutil.DebugPrint(
-		screen,
-		fmt.Sprintf("TPS: %0.2f, C: %d\nB: %.2f,%.2f, M: %.2f, BA: %.2f, BAV: %.2f",
-			ebiten.CurrentTPS(), g.cyclesPerTick,
-			g.bots[2].Velocity().X, g.bots[2].Velocity().Y,
-			math.Sqrt(math.Pow(g.bots[2].Velocity().X, 2)+math.Pow(g.bots[2].Velocity().Y, 2)),
-			180/math.Pi*g.bots[2].Angle(), g.bots[2].AngularVelocity(),
-		),
-	)
-
 	g.ui.Draw(screen)
 
+	// debug info
+	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
 	ebitenutil.DebugPrintAt(
 		screen,
-		fmt.Sprintf("%s\nCursor World Pos: %.2f,%.2f",
+		fmt.Sprintf("TPS: %0.2f, C: %d\n%s\nCursor World Pos: %.2f,%.2f",
+			ebiten.CurrentTPS(), g.cyclesPerTick,
 			g.camera.String(),
 			worldX, worldY,
 		),
-		0, g.h-48,
+		0, g.h-72,
 	)
 }
 

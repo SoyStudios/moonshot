@@ -1,16 +1,20 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"image/color"
 	"math"
+	"strings"
 
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/jakecoffman/cp"
 )
 
 type (
 	Bot struct {
 		*cp.Body
-		shape *cp.Shape
+		*cp.Shape
 		space *cp.Space
 
 		id int16
@@ -76,13 +80,27 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 
 		machine: NewMachine(),
 	}
+	// connect machine state interface
 	b.machine.state = b
-	b.shape = cp.NewCircle(b.Body, 8, cp.Vector{})
-	b.shape.SetElasticity(0)
-	b.shape.SetFriction(0)
-	sp.AddShape(b.shape)
+	// create shape
+	b.Shape = cp.NewCircle(b.Body, 8, cp.Vector{})
+	b.Shape.SetElasticity(0)
+	b.Shape.SetFriction(0)
+	b.Shape.UserData = b
+	b.Shape.Filter.Categories = SHAPE_CATEGORY_BOT
+	sp.AddShape(b.Shape)
+
+	b.Body.UserData = b
 
 	return b
+}
+
+func (b *Bot) Mass() float64 {
+	return b.Body.Mass()
+}
+
+func (b *Bot) CenterOfGravity() cp.Vector {
+	return b.Body.CenterOfGravity()
 }
 
 func (b *Bot) FrameReset() {
@@ -124,9 +142,6 @@ func (b *Bot) Thrust(x, y int16) {
 
 func (b *Bot) Turn(a int16) {
 	angle := float64(a) / 180 * math.Pi
-	log.Printf("ad: %d, av: %.2f\n",
-		a, angle,
-	)
 	b.angle += angle
 }
 
@@ -136,16 +151,90 @@ func (b *Bot) Mine(strength int16) {
 func (b *Bot) Reproduce(energy int16) {
 }
 
+func (b *Bot) Impulse(strength int16) {
+	v := cp.ForAngle(b.angle)
+	v = v.Mult(float64(strength))
+	b.thrust = b.thrust.Add(v)
+}
+
 func (b *Bot) Execute() {
 	if b.thrust.X != 0 || b.thrust.Y != 0 {
 		// apply thrust
 		v := b.thrust
 		v = v.Clamp(300)
-		log.Printf("exec thr: %.2f,%.2f\n", v.X, v.Y)
 		b.ApplyImpulseAtLocalPoint(
 			v,
 			b.CenterOfGravity(),
 		)
 		b.impulses = append(b.impulses, v)
+	}
+}
+
+func (b *Bot) DrawInfo(ui *UI, img *ebiten.Image) {
+	text.Draw(img,
+		fmt.Sprintf(`bot (%d)
+
+  Position: (%.2f, %.2f)
+  Heading: %d
+  Velocity: (%.2f, %.2f)
+  Speed: %.2f
+
+  Thrust Vector: (%.2f, %.2f)
+
+  Mass/Energy: %.2f / %.2f
+`, b.id,
+			b.Position().X, b.Position().Y,
+			int(b.angle*180/math.Pi)%360,
+			b.Velocity().X, b.Velocity().Y,
+			b.Velocity().Length(),
+
+			b.thrust.X, b.thrust.Y,
+
+			b.Mass(), b.Mass()*b.leonhardEfficiency(),
+		),
+		ui.game.assets.font,
+		24, 80,
+		color.White)
+
+	text.Draw(img,
+		"Machine",
+		ui.game.assets.font,
+		24, 240,
+		color.White)
+	var buf strings.Builder
+	buf.WriteString("  Registers\n\n")
+	for i, v := range b.machine.registers {
+		buf.WriteString(fmt.Sprintf("  %2d  % 6d\n", i, v))
+	}
+	text.Draw(img,
+		buf.String(),
+		ui.game.assets.font,
+		24, 260,
+		color.White)
+
+	text.Draw(img,
+		"Genes",
+		ui.game.assets.font,
+		200, 260,
+		color.White)
+	white := ebiten.NewImage(8, 5)
+	white.Fill(color.White)
+	green := ebiten.NewImage(8, 5)
+	green.Fill(color.RGBA{0, 255, 0, 255})
+	var row, col int
+	op := &ebiten.DrawImageOptions{}
+	for i := range b.machine.program {
+		if i%10 == 0 {
+			row++
+			col = 0
+		}
+		op.GeoM.Reset()
+		op.GeoM.Translate(200+(float64(col)*10), 265+(float64(row)*8))
+		if b.machine.activated[i] {
+			img.DrawImage(green, op)
+		} else {
+			img.DrawImage(white, op)
+		}
+		col++
 	}
 }

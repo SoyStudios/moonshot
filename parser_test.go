@@ -46,7 +46,7 @@ END
 	}
 
 	m := NewMachine()
-	m.run = runInstruction
+	m.run = runInstructionDebug
 	m.program = program
 	stateMock := &StateMock{}
 	m.state = stateMock
@@ -136,6 +136,7 @@ BEGIN EX
 	PSH CON 3
 	DIV
 	REP
+	IMP
 END
 	`
 	p := NewParser(strings.NewReader(code))
@@ -179,6 +180,7 @@ END
 	stateMock.On("Turn", int16(-420))
 	stateMock.On("Mine", int16(3))
 	stateMock.On("Reproduce", int16(4))
+	stateMock.On("Impulse", int16(-42))
 
 	m.Run()
 
@@ -239,9 +241,49 @@ END
 	stateMock.On("Thrust", int16(-42), int16(-420))
 
 	m.Run()
-	t.Logf("%v", program)
 
 	if !stateMock.AssertExpectations(t) {
+		return
+	}
+}
+
+func TestCommentBeforeBeginIsAllowed(t *testing.T) {
+	code := `
+// This comment should be allowed
+BEGIN EV
+	PSH CON 1
+END
+BEGIN EX
+END
+`
+	p := NewParser(strings.NewReader(code))
+	program, err := p.Parse()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+		return
+	}
+	comment, ok := program[0].Evaluate[0].(*Comment)
+	if !ok {
+		t.Errorf("unexpected type %T", program[0].Evaluate[0].(*Comment))
+		return
+	}
+	if !assert.Equal(t, "// This comment should be allowed", comment.Lit) {
+		return
+	}
+}
+
+func TestHandlePrematureEOFWhenParsing(t *testing.T) {
+	code := `
+BEGIN EV
+	PSH CON 1
+END
+BEGIN EX
+	PSH CON 2
+`
+	p := NewParser(strings.NewReader(code))
+	_, err := p.Parse()
+	if err == nil {
+		t.Error("expect error on parse")
 		return
 	}
 }

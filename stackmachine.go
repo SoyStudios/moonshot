@@ -24,21 +24,11 @@ type (
 		registers [16]int16
 
 		state State
+
+		activated map[int]bool
 	}
 
-	runFunc func(*Machine, []int16, func())
-
-	// Gene represents one gene of the bot's program.
-	//
-	// A Gene consists of two sections, an evaluation
-	// and an execution section.
-	// By the end of the evaluation section, the stack
-	// will be popped. If the value is > 0 the execution
-	// section will be executed.
-	Gene struct {
-		Evaluate []int16
-		Execute  []int16
-	}
+	runFunc func(*Machine, AST, func())
 
 	State interface {
 		// Reset resets the bot for each cycle
@@ -61,6 +51,7 @@ type (
 		Turn(int16)
 		Mine(int16)
 		Reproduce(int16)
+		Impulse(int16)
 	}
 )
 
@@ -92,6 +83,8 @@ func NewMachine() *Machine {
 	m := &Machine{
 		run:   runInstruction,
 		stack: stackPool.Get().(*stack),
+
+		activated: make(map[int]bool),
 	}
 	return m
 }
@@ -103,20 +96,20 @@ func (m *Machine) Destroy() {
 
 func (m *Machine) Run() {
 	m.state.Reset()
-	for _, g := range m.program {
-		m.RunGene(g)
+	for i, g := range m.program {
+		m.activated[i] = m.RunGene(g)
 	}
 	m.state.Execute()
 }
 
-func (m *Machine) RunGene(g *Gene) {
+func (m *Machine) RunGene(g *Gene) bool {
 	m.pc = 0
 	m.stack.Reset()
 	if len(g.Evaluate) == 0 {
-		return
+		return false
 	}
 	for {
-		inst := Translate(Token(g.Evaluate[m.pc]))
+		inst := g.Evaluate[m.pc]
 		inst.Run(m, g.Evaluate)
 		m.pc++
 		if m.pc > len(g.Evaluate)-1 {
@@ -124,36 +117,37 @@ func (m *Machine) RunGene(g *Gene) {
 		}
 	}
 	if len(*m.stack) <= 0 {
-		return
+		return false
 	}
 	if m.stack.Pop() < 1 {
-		return
+		return false
 	}
 
 	if len(g.Execute) == 0 {
-		return
+		return true
 	}
 	m.pc = 0
 	m.stack.Reset()
 	for {
-		inst := Translate(Token(g.Execute[m.pc]))
+		inst := g.Execute[m.pc]
 		inst.Run(m, g.Execute)
 		m.pc++
 		if m.pc > len(g.Execute)-1 {
 			break
 		}
 	}
+	return true
 }
 
-func runInstruction(m *Machine, code []int16, f func()) {
+func runInstruction(m *Machine, code AST, f func()) {
 	f()
 }
 
-func runInstructionDebug(m *Machine, code []int16, f func()) {
+func runInstructionDebug(m *Machine, code AST, f func()) {
 	fmt.Printf("%v\n", code)
 	fmt.Println("pc", m.pc)
-	inst := Translate(Token(code[m.pc]))
-	fmt.Printf("%s\n", inst.String(m, code))
+	inst := code[m.pc]
+	fmt.Printf("%s\n", inst)
 	fmt.Println("exec")
 
 	f()
@@ -163,7 +157,7 @@ func runInstructionDebug(m *Machine, code []int16, f func()) {
 
 func runWithBreak(breakpoint int, breakFunc func(m *Machine) bool, runFunc runFunc) runFunc {
 	var ran bool
-	return func(m *Machine, code []int16, f func()) {
+	return func(m *Machine, code AST, f func()) {
 		if !ran && m.pc == breakpoint {
 			ran = true
 			if !breakFunc(m) {

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -31,6 +29,7 @@ const (
 
 	CON Token = 128 // Constant identifier
 	REG Token = 129 // Register identifier
+	RMT Token = 130 // Remote register identifier
 
 	// comparison
 	// x COMP y, where x was pushed before y
@@ -57,87 +56,88 @@ const (
 	TRN Token = 1027 // Pop x, y and turn by the angle given by unit vector with atan(y, x)
 	MNE Token = 1028 // Pop and mine with strength x
 	REP Token = 1029 // Pop and reproduce using x energy
+	IMP Token = 1030 // Pop x and thrust for strength x for current heading
 )
 
 type (
 	Token int16
 
+	AST []Instruction
+
 	Instruction interface {
-		String(*Machine, []int16) string
-		// Int() int16
-		Run(*Machine, []int16)
-		Parse(*Parser, *[]int16) error
+		fmt.Stringer
+		Run(*Machine, AST)
+		Parse(*Parser, *AST) error
 	}
 )
 
 func Translate(token Token) Instruction {
 	switch token {
-	case LITERAL:
-		return Literal{}
 	case NOP:
-		return Nop{}
+		return &Nop{}
+	case COMMENT:
+		return &Comment{}
+	case BEGIN:
+		return &Begin{}
 
 	case RDX:
-		return ReadX{}
+		return &ReadX{}
 	case RDY:
-		return ReadY{}
+		return &ReadY{}
 	case RDE:
-		return ReadEnergy{}
+		return &ReadEnergy{}
 
 	case PSH:
-		return Push{}
+		return &Push{}
 	case POP:
-		return Pop{}
-
-	case CON:
-		return Constant{}
-	case REG:
-		return Register{}
+		return &Pop{}
 
 	case GEQ:
-		return GreaterEqual{}
+		return &GreaterEqual{}
 	case LEQ:
-		return LessEqual{}
+		return &LessEqual{}
 	case IEQ:
-		return IsEqual{}
+		return &IsEqual{}
 	case GRT:
-		return GreaterThan{}
+		return &GreaterThan{}
 	case LST:
-		return LessThan{}
+		return &LessThan{}
 
 	case NOT:
-		return Not{}
+		return &Not{}
 	case AND:
-		return And{}
+		return &And{}
 	case IOR:
-		return Or{}
+		return &Or{}
 	case XOR:
-		return Xor{}
+		return &Xor{}
 	case ADD:
-		return Add{}
+		return &Add{}
 	case SUB:
-		return Sub{}
+		return &Sub{}
 	case MUL:
-		return Mul{}
+		return &Mul{}
 	case DIV:
-		return Div{}
+		return &Div{}
 	case NEG:
-		return Neg{}
+		return &Neg{}
 	case ABS:
-		return Abs{}
+		return &Abs{}
 
 	case RID:
-		return RemoteID{}
+		return &RemoteID{}
 	case SCN:
-		return Scan{}
+		return &Scan{}
 	case THR:
-		return Thrust{}
+		return &Thrust{}
 	case TRN:
-		return Turn{}
+		return &Turn{}
 	case MNE:
-		return Mine{}
+		return &Mine{}
 	case REP:
-		return Reproduce{}
+		return &Reproduce{}
+	case IMP:
+		return &Impulse{}
 
 	case ILLEGAL:
 		fallthrough
@@ -157,6 +157,8 @@ func (t Token) String() string {
 		return "LITERAL"
 	case NOP:
 		return "NOP"
+	case COMMENT:
+		return "//"
 
 	case BEGIN:
 		return "BEGIN"
@@ -183,6 +185,8 @@ func (t Token) String() string {
 		return "CON"
 	case REG:
 		return "REG"
+	case RMT:
+		return "RMT"
 
 	case GEQ:
 		return "GEQ"
@@ -228,6 +232,8 @@ func (t Token) String() string {
 		return "MNE"
 	case REP:
 		return "REP"
+	case IMP:
+		return "IMP"
 
 	case ILLEGAL:
 		fallthrough
@@ -236,248 +242,197 @@ func (t Token) String() string {
 	}
 }
 
-// TranslateProgram is a utility funtion for converting a
-// slice of (readable) tokens into the byte representation
-func TranslateProgram(tks []Token) []int16 {
-	program := make([]int16, len(tks))
-	for i, t := range tks {
-		program[i] = int16(t)
-	}
-	return program
-}
-
 // instructions
 
 type Illegal struct{}
 
-func (i Illegal) String(*Machine, []int16) string {
+func (i Illegal) String() string {
 	return ILLEGAL.String()
 }
-func (i Illegal) Run(_ *Machine, _ []int16) {}
-func (i Illegal) Parse(p *Parser, pr *[]int16) error {
+func (i Illegal) Run(_ *Machine, _ AST) {}
+func (i Illegal) Parse(p *Parser, _ *AST) error {
 	p.unscan()
 	tok, lit := p.scanIgnoreWhitespace()
 	return fmt.Errorf("cannot parse illegal token %s (\"%s\")", tok, lit)
 }
 
-type Literal struct{}
-
-func (e Literal) String(m *Machine, code []int16) string {
-	return fmt.Sprintf("literal: %d", code[m.pc])
+type Begin struct {
+	Section Token
 }
-func (e Literal) Run(m *Machine, code []int16) {}
-func (e Literal) Parse(p *Parser, program *[]int16) error {
-	p.unscan()
-	_, lit := p.scanIgnoreWhitespace()
-	val, err := strconv.ParseInt(lit, 10, 16)
-	if err != nil {
-		return errors.Wrap(err, "invalid literal")
+
+func (b Begin) String() string {
+	return fmt.Sprintf("%s %s", BEGIN, b.Section)
+}
+func (b Begin) Run(m *Machine, code AST) {
+	m.run(m, code, func() {})
+}
+func (b *Begin) Parse(p *Parser, program *AST) error {
+	tok, lit := p.scanIgnoreWhitespace()
+	if tok != EV && tok != EX {
+		return fmt.Errorf("unexpected token %s (\"%s\"). Expecting %s or %s", tok, lit, EV, EX)
 	}
-	*program = append(*program, int16(val))
+	b.Section = tok
+	*program = append(*program, b)
 	return nil
 }
 
 type Nop struct{}
 
-func (n Nop) String(_ *Machine, _ []int16) string {
+func (n Nop) String() string {
 	return NOP.String()
 }
-func (n Nop) Run(m *Machine, code []int16) {
+func (n Nop) Run(m *Machine, code AST) {
 	m.run(m, code, func() {})
 }
-func (n Nop) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, int16(NOP))
+func (n *Nop) Parse(p *Parser, program *AST) error {
+	*program = append(*program, n)
+	return nil
+}
+
+type Comment struct {
+	Lit string
+}
+
+func (n Comment) String() string {
+	return COMMENT.String()
+}
+func (n Comment) Run(m *Machine, code AST) {
+	m.run(m, code, func() {})
+}
+func (n *Comment) Parse(p *Parser, program *AST) error {
+	p.unscan()
+	_, n.Lit = p.scanIgnoreWhitespace()
+	*program = append(*program, n)
 	return nil
 }
 
 type ReadX struct{}
 
-func (e ReadX) String(*Machine, []int16) string {
+func (r ReadX) String() string {
 	return RDX.String()
 }
-func (e ReadX) Run(m *Machine, code []int16) {
+func (r ReadX) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		m.stack.Push(m.state.X())
 	})
 }
-func (e ReadX) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, int16(RDX))
+func (r *ReadX) Parse(p *Parser, program *AST) error {
+	*program = append(*program, r)
 	return nil
 }
 
 type ReadY struct{}
 
-func (e ReadY) String(*Machine, []int16) string {
+func (r ReadY) String() string {
 	return RDY.String()
 }
-func (e ReadY) Run(m *Machine, code []int16) {
+func (r ReadY) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		m.stack.Push(m.state.Y())
 	})
 }
-func (e ReadY) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, int16(RDY))
+func (r *ReadY) Parse(p *Parser, program *AST) error {
+	*program = append(*program, r)
 	return nil
 }
 
 type ReadEnergy struct{}
 
-func (e ReadEnergy) String(*Machine, []int16) string {
+func (e ReadEnergy) String() string {
 	return RDE.String()
 }
 func (e ReadEnergy) Int() int16 {
 	return int16(RDE)
 }
-func (e ReadEnergy) Run(m *Machine, code []int16) {
+func (e ReadEnergy) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		m.stack.Push(m.state.Energy())
 	})
 }
-func (e ReadEnergy) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *ReadEnergy) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
-type Push struct{}
+type Push struct {
+	Source Token
+	Value  int16
+}
 
-func (e Push) String(m *Machine, code []int16) string {
-	if m.pc+2 > len(code)-1 {
-		return "PSH ILLEGAL"
-	}
-	source := Token(code[m.pc+1])
-	sourceValue := code[m.pc+2]
-	return fmt.Sprintf("%s %s %d", PSH, source, sourceValue)
+func (e Push) String() string {
+	return fmt.Sprintf("%s %s %d", PSH, e.Source, e.Value)
 }
-func (e Push) Int() int16 {
-	return int16(PSH)
-}
-func (e Push) Run(m *Machine, code []int16) {
+func (e Push) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
-		if m.pc+2 > len(code)-1 {
-			return
-		}
-		source := Token(code[m.pc+1])
-		sourceValue := code[m.pc+2]
-		m.pc += 2
-
-		switch source {
+		switch e.Source {
 		case CON:
-			m.stack.Push(sourceValue)
+			m.stack.Push(e.Value)
 		case REG:
-			if int(sourceValue) > len(m.registers)-1 || sourceValue < 0 {
+			if int(e.Value) > len(m.registers)-1 || e.Value < 0 {
 				return
 			}
-			m.stack.Push(m.registers[sourceValue])
+			m.stack.Push(m.registers[e.Value])
 		default:
 			return
 		}
 	})
 }
-func (e Push) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Push) Parse(p *Parser, program *AST) error {
 	tok, lit := p.scanIgnoreWhitespace()
 	if tok != CON && tok != REG {
 		return fmt.Errorf("unexpected token %s (\"%s\") for PSH", tok, lit)
 	}
-	p.unscan()
+	e.Source = tok
+	tok, lit = p.scanIgnoreWhitespace()
+	if tok != LITERAL {
+		return fmt.Errorf("unexepcted %s (\"%s\") on PSH.", tok, lit)
+	}
+	v, err := strconv.ParseInt(lit, 10, 16)
+	if err != nil {
+		return fmt.Errorf("invalid literal: %s. %v", lit, err)
+	}
+	e.Value = int16(v)
+	*program = append(*program, e)
 	return nil
 }
 
-type Pop struct{}
+type Pop struct {
+	Index int16
+}
 
-func (e Pop) String(m *Machine, code []int16) string {
-	if m.pc+2 > len(code)-1 {
-		return "POP ILLEGAL"
-	}
-	source := Translate(Token(code[m.pc+1]))
-	sourceValue := code[m.pc+2]
-	return fmt.Sprintf("%s %s %d", POP, source.String(m, code), sourceValue)
+func (e Pop) String() string {
+	return fmt.Sprintf("%s %s %d", POP, REG, e.Index)
 }
-func (e Pop) Int() int16 {
-	return int16(POP)
-}
-func (e Pop) Run(m *Machine, code []int16) {
+func (e Pop) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
-		if m.pc+2 > len(code)-1 {
-			return
-		}
-		source := Token(code[m.pc+1])
-		sourceValue := code[m.pc+2]
-		m.pc += 2
-
-		if len(*m.stack) <= 0 {
-			return
-		}
-		switch source {
-		case CON:
-			return
-		case REG:
-			if int(sourceValue) > len(m.registers)-1 || sourceValue < 0 {
-				return
-			}
-			m.registers[sourceValue] = m.stack.Pop()
-		default:
-			return
-		}
+		m.registers[e.Index] = m.stack.Pop()
 	})
 }
-func (e Pop) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Pop) Parse(p *Parser, program *AST) error {
 	tok, lit := p.scanIgnoreWhitespace()
 	if tok != REG {
 		return fmt.Errorf("unexpected token %s (\"%s\") for POP", tok, lit)
 	}
-	p.unscan()
-	return nil
-}
-
-type Constant struct{}
-
-func (e Constant) String(*Machine, []int16) string {
-	return CON.String()
-}
-func (e Constant) Int() int16 {
-	return int16(CON)
-}
-func (e Constant) Run(m *Machine, code []int16) {}
-func (e Constant) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
-	tok, lit := p.scanIgnoreWhitespace()
+	tok, lit = p.scanIgnoreWhitespace()
 	if tok != LITERAL {
-		return fmt.Errorf("unexpected token %s (\"%s\") expecting LITERAL", tok, lit)
+		return fmt.Errorf("unexpected token %s (\"%s\") for POP. Expect literal.", tok, lit)
 	}
-	p.unscan()
-	return nil
-}
-
-type Register struct{}
-
-func (e Register) String(*Machine, []int16) string {
-	return REG.String()
-}
-func (e Register) Int() int16 {
-	return int16(REG)
-}
-func (e Register) Run(m *Machine, code []int16) {}
-func (e Register) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
-	tok, lit := p.scanIgnoreWhitespace()
-	if tok != LITERAL {
-		return fmt.Errorf("unexpected token %s (\"%s\") expecting CONST", tok, lit)
+	v, err := strconv.ParseInt(lit, 10, 16)
+	if err != nil {
+		return fmt.Errorf("invalid literal %s: %v", lit, err)
 	}
-	p.unscan()
+	e.Index = int16(v)
+	*program = append(*program, e)
+
 	return nil
 }
 
 type GreaterEqual struct{}
 
-func (e GreaterEqual) String(*Machine, []int16) string {
+func (e GreaterEqual) String() string {
 	return GEQ.String()
 }
-func (e GreaterEqual) Int() int16 {
-	return int16(GEQ)
-}
-func (e GreaterEqual) Run(m *Machine, code []int16) {
+func (e GreaterEqual) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -490,20 +445,17 @@ func (e GreaterEqual) Run(m *Machine, code []int16) {
 		}
 	})
 }
-func (e GreaterEqual) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *GreaterEqual) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type LessEqual struct{}
 
-func (e LessEqual) String(*Machine, []int16) string {
+func (e LessEqual) String() string {
 	return LEQ.String()
 }
-func (e LessEqual) Int() int16 {
-	return int16(LEQ)
-}
-func (e LessEqual) Run(m *Machine, code []int16) {
+func (e LessEqual) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -516,20 +468,17 @@ func (e LessEqual) Run(m *Machine, code []int16) {
 		}
 	})
 }
-func (e LessEqual) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *LessEqual) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type IsEqual struct{}
 
-func (e IsEqual) String(*Machine, []int16) string {
+func (e IsEqual) String() string {
 	return IEQ.String()
 }
-func (e IsEqual) Int() int16 {
-	return int16(IEQ)
-}
-func (e IsEqual) Run(m *Machine, code []int16) {
+func (e IsEqual) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -542,20 +491,17 @@ func (e IsEqual) Run(m *Machine, code []int16) {
 		}
 	})
 }
-func (e IsEqual) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *IsEqual) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type GreaterThan struct{}
 
-func (e GreaterThan) String(*Machine, []int16) string {
+func (e GreaterThan) String() string {
 	return GRT.String()
 }
-func (e GreaterThan) Int() int16 {
-	return int16(GRT)
-}
-func (e GreaterThan) Run(m *Machine, code []int16) {
+func (e GreaterThan) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -568,20 +514,17 @@ func (e GreaterThan) Run(m *Machine, code []int16) {
 		}
 	})
 }
-func (e GreaterThan) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *GreaterThan) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type LessThan struct{}
 
-func (e LessThan) String(*Machine, []int16) string {
+func (e LessThan) String() string {
 	return LST.String()
 }
-func (e LessThan) Int() int16 {
-	return int16(LST)
-}
-func (e LessThan) Run(m *Machine, code []int16) {
+func (e LessThan) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -594,20 +537,17 @@ func (e LessThan) Run(m *Machine, code []int16) {
 		}
 	})
 }
-func (e LessThan) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *LessThan) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Not struct{}
 
-func (e Not) String(*Machine, []int16) string {
+func (e Not) String() string {
 	return NOT.String()
 }
-func (e Not) Int() int16 {
-	return int16(NOT)
-}
-func (e Not) Run(m *Machine, code []int16) {
+func (e Not) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
@@ -620,20 +560,17 @@ func (e Not) Run(m *Machine, code []int16) {
 		}
 	})
 }
-func (e Not) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Not) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type And struct{}
 
-func (e And) String(*Machine, []int16) string {
+func (e And) String() string {
 	return AND.String()
 }
-func (e And) Int() int16 {
-	return int16(AND)
-}
-func (e And) Run(m *Machine, code []int16) {
+func (e And) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -642,20 +579,17 @@ func (e And) Run(m *Machine, code []int16) {
 		m.stack.Push(a & b)
 	})
 }
-func (e And) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *And) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Or struct{}
 
-func (e Or) String(*Machine, []int16) string {
+func (e Or) String() string {
 	return IOR.String()
 }
-func (e Or) Int() int16 {
-	return int16(IOR)
-}
-func (e Or) Run(m *Machine, code []int16) {
+func (e Or) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -664,20 +598,17 @@ func (e Or) Run(m *Machine, code []int16) {
 		m.stack.Push(a | b)
 	})
 }
-func (e Or) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Or) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Xor struct{}
 
-func (e Xor) String(*Machine, []int16) string {
+func (e Xor) String() string {
 	return XOR.String()
 }
-func (e Xor) Int() int16 {
-	return int16(XOR)
-}
-func (e Xor) Run(m *Machine, code []int16) {
+func (e Xor) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -686,20 +617,17 @@ func (e Xor) Run(m *Machine, code []int16) {
 		m.stack.Push(a ^ b)
 	})
 }
-func (e Xor) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Xor) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Add struct{}
 
-func (e Add) String(*Machine, []int16) string {
+func (e Add) String() string {
 	return ADD.String()
 }
-func (e Add) Int() int16 {
-	return int16(ADD)
-}
-func (e Add) Run(m *Machine, code []int16) {
+func (e Add) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -708,20 +636,17 @@ func (e Add) Run(m *Machine, code []int16) {
 		m.stack.Push(a + b)
 	})
 }
-func (e Add) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Add) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Sub struct{}
 
-func (e Sub) String(*Machine, []int16) string {
+func (e Sub) String() string {
 	return SUB.String()
 }
-func (e Sub) Int() int16 {
-	return int16(SUB)
-}
-func (e Sub) Run(m *Machine, code []int16) {
+func (e Sub) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -730,20 +655,17 @@ func (e Sub) Run(m *Machine, code []int16) {
 		m.stack.Push(a - b)
 	})
 }
-func (e Sub) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Sub) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Mul struct{}
 
-func (e Mul) String(*Machine, []int16) string {
+func (e Mul) String() string {
 	return MUL.String()
 }
-func (e Mul) Int() int16 {
-	return int16(MUL)
-}
-func (e Mul) Run(m *Machine, code []int16) {
+func (e Mul) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -752,20 +674,17 @@ func (e Mul) Run(m *Machine, code []int16) {
 		m.stack.Push(a * b)
 	})
 }
-func (e Mul) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Mul) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Div struct{}
 
-func (e Div) String(*Machine, []int16) string {
+func (e Div) String() string {
 	return DIV.String()
 }
-func (e Div) Int() int16 {
-	return int16(DIV)
-}
-func (e Div) Run(m *Machine, code []int16) {
+func (e Div) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -777,20 +696,17 @@ func (e Div) Run(m *Machine, code []int16) {
 		m.stack.Push(a / b)
 	})
 }
-func (e Div) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Div) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Neg struct{}
 
-func (n Neg) String(*Machine, []int16) string {
+func (n Neg) String() string {
 	return NEG.String()
 }
-func (n Neg) Int() int16 {
-	return int16(NEG)
-}
-func (n Neg) Run(m *Machine, code []int16) {
+func (n Neg) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
@@ -799,20 +715,17 @@ func (n Neg) Run(m *Machine, code []int16) {
 		m.stack.Push(a * -1)
 	})
 }
-func (e Neg) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Neg) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Abs struct{}
 
-func (n Abs) String(*Machine, []int16) string {
+func (n Abs) String() string {
 	return ABS.String()
 }
-func (n Abs) Int() int16 {
-	return int16(ABS)
-}
-func (n Abs) Run(m *Machine, code []int16) {
+func (n Abs) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -827,20 +740,17 @@ func (n Abs) Run(m *Machine, code []int16) {
 		m.stack.Push(v)
 	})
 }
-func (e Abs) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Abs) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type RemoteID struct{}
 
-func (e RemoteID) String(*Machine, []int16) string {
+func (e RemoteID) String() string {
 	return RID.String()
 }
-func (e RemoteID) Int() int16 {
-	return int16(RID)
-}
-func (e RemoteID) Run(m *Machine, code []int16) {
+func (e RemoteID) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
@@ -849,20 +759,17 @@ func (e RemoteID) Run(m *Machine, code []int16) {
 		m.stack.Push(m.state.RemoteID(a))
 	})
 }
-func (e RemoteID) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *RemoteID) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Scan struct{}
 
-func (e Scan) String(*Machine, []int16) string {
+func (e Scan) String() string {
 	return SCN.String()
 }
-func (e Scan) Int() int16 {
-	return int16(SCN)
-}
-func (e Scan) Run(m *Machine, code []int16) {
+func (e Scan) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -873,20 +780,17 @@ func (e Scan) Run(m *Machine, code []int16) {
 		m.stack.Push(y)
 	})
 }
-func (e Scan) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Scan) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Thrust struct{}
 
-func (e Thrust) String(*Machine, []int16) string {
+func (e Thrust) String() string {
 	return THR.String()
 }
-func (e Thrust) Int() int16 {
-	return int16(THR)
-}
-func (e Thrust) Run(m *Machine, code []int16) {
+func (e Thrust) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 1 {
 			return
@@ -895,20 +799,36 @@ func (e Thrust) Run(m *Machine, code []int16) {
 		m.state.Thrust(x, y)
 	})
 }
-func (e Thrust) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Thrust) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
+	return nil
+}
+
+type Impulse struct{}
+
+func (i Impulse) String() string {
+	return IMP.String()
+}
+func (i Impulse) Run(m *Machine, code AST) {
+	m.run(m, code, func() {
+		if len(*m.stack) <= 0 {
+			return
+		}
+		x := m.stack.Pop()
+		m.state.Impulse(x)
+	})
+}
+func (i *Impulse) Parse(p *Parser, program *AST) error {
+	*program = append(*program, i)
 	return nil
 }
 
 type Turn struct{}
 
-func (e Turn) String(*Machine, []int16) string {
+func (e Turn) String() string {
 	return TRN.String()
 }
-func (e Turn) Int() int16 {
-	return int16(TRN)
-}
-func (e Turn) Run(m *Machine, code []int16) {
+func (e Turn) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
@@ -917,20 +837,17 @@ func (e Turn) Run(m *Machine, code []int16) {
 		m.state.Turn(a)
 	})
 }
-func (e Turn) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Turn) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Mine struct{}
 
-func (e Mine) String(*Machine, []int16) string {
+func (e Mine) String() string {
 	return MNE.String()
 }
-func (e Mine) Int() int16 {
-	return int16(MNE)
-}
-func (e Mine) Run(m *Machine, code []int16) {
+func (e Mine) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
@@ -939,20 +856,17 @@ func (e Mine) Run(m *Machine, code []int16) {
 		m.state.Mine(a)
 	})
 }
-func (e Mine) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Mine) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
 
 type Reproduce struct{}
 
-func (e Reproduce) String(*Machine, []int16) string {
+func (e Reproduce) String() string {
 	return REP.String()
 }
-func (e Reproduce) Int() int16 {
-	return int16(REP)
-}
-func (e Reproduce) Run(m *Machine, code []int16) {
+func (e Reproduce) Run(m *Machine, code AST) {
 	m.run(m, code, func() {
 		if len(*m.stack) <= 0 {
 			return
@@ -961,7 +875,7 @@ func (e Reproduce) Run(m *Machine, code []int16) {
 		m.state.Reproduce(a)
 	})
 }
-func (e Reproduce) Parse(p *Parser, program *[]int16) error {
-	*program = append(*program, e.Int())
+func (e *Reproduce) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
 	return nil
 }
