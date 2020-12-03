@@ -43,6 +43,10 @@ type (
 
 		camera *camera
 
+		controls struct {
+			follow Positioner
+		}
+
 		cyclesPerTick int
 
 		space *cp.Space
@@ -59,6 +63,10 @@ type (
 		w, h int
 
 		p *Player
+	}
+
+	Positioner interface {
+		Position() cp.Vector
 	}
 )
 
@@ -241,6 +249,8 @@ END
 	b.SetPosition(cp.Vector{X: 200, Y: 200})
 	b.machine.program = program
 	g.bots = append(g.bots, b)
+	g.controls.follow = b
+
 	g.ui.info = b
 	g.ui.code = GeneDrawerFor(0, b.machine.program[0])
 
@@ -282,6 +292,10 @@ func (g *Game) updateOnRepeatingKey(input string, f func()) {
 	}
 }
 
+func (g *Game) resetFollow() {
+	g.controls.follow = nil
+}
+
 // Update is the main update loop
 func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
@@ -292,23 +306,29 @@ func (g *Game) Update() error {
 
 	// Camera controls
 	g.updateOnKey("zoomOut", func() {
+		g.resetFollow()
 		g.camera.zoomStep--
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	})
 	g.updateOnKey("zoomIn", func() {
+		g.resetFollow()
 		g.camera.zoomStep++
 		g.camera.zoomTo(g.camera.ScreenToWorld(ebiten.CursorPosition()))
 	})
 	g.updateOnKey("up", func() {
+		g.resetFollow()
 		g.camera.Position.Y -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("down", func() {
+		g.resetFollow()
 		g.camera.Position.Y += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("left", func() {
+		g.resetFollow()
 		g.camera.Position.X -= g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 	g.updateOnKey("right", func() {
+		g.resetFollow()
 		g.camera.Position.X += g.settings.cameraMoveSpeed / g.camera.zoomFactor()
 	})
 
@@ -325,6 +345,11 @@ func (g *Game) Update() error {
 		return nil
 	}
 	g.step = 0
+
+	// follow
+	if g.controls.follow != nil {
+		g.camera.Position.X, g.camera.Position.Y = g.controls.follow.Position().X-g.camera.viewportCenter().X, g.controls.follow.Position().Y-g.camera.viewportCenter().Y
+	}
 
 	// Game speed controls
 	g.updateOnRepeatingKey("speedUp", func() {

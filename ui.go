@@ -17,8 +17,11 @@ type (
 
 		layer *ebiten.Image
 
-		info InfoDrawer
-		code CodeDrawer
+		info                 InfoDrawer
+		infoBaseX, infoBaseY float64
+
+		code                 CodeDrawer
+		codeBaseX, codeBaseY float64
 	}
 
 	InfoDrawer interface {
@@ -31,10 +34,14 @@ type (
 )
 
 func NewUI(g *Game) *UI {
-	return &UI{
+	ui := &UI{
 		game:  g,
 		layer: ebiten.NewImage(g.w, g.h),
 	}
+	ui.infoBaseX, ui.infoBaseY = float64(ui.game.w)/3*2, 0
+	ui.codeBaseX, ui.codeBaseY = 0, 0
+
+	return ui
 }
 
 func (u *UI) Draw(screen *ebiten.Image) {
@@ -44,7 +51,7 @@ func (u *UI) Draw(screen *ebiten.Image) {
 
 	if u.info != nil {
 		op.GeoM.Reset()
-		op.GeoM.Translate(float64(u.game.w)/3*2, 0)
+		op.GeoM.Translate(u.infoBaseX, 0)
 		info := u.InfoScreen()
 		u.info.DrawInfo(u, info)
 		u.layer.DrawImage(info, op)
@@ -65,28 +72,35 @@ func (u *UI) Update() {
 	if !inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
 		return
 	}
-	x, y := u.game.camera.ScreenToWorld(ebiten.CursorPosition())
-	log.Printf("click %.2f,%.2f", x, y)
-	log.Printf("filter: %v", u.game.bots[2].Shape.Filter.Reject(cp.ShapeFilter{
-		Categories: SHAPE_CATEGORY_ANY,
-		Mask:       SHAPE_CATEGORY_BOT,
-	}))
+	cursorX, cursorY := ebiten.CursorPosition()
+	// if clicked on bot
+	x, y := u.game.camera.ScreenToWorld(cursorX, cursorY)
 	info := u.game.space.PointQueryNearest(cp.Vector{X: x, Y: y}, 5,
 		cp.ShapeFilter{
 			Categories: SHAPE_CATEGORY_ANY,
 			Mask:       SHAPE_CATEGORY_BOT,
 		},
 	)
-	log.Printf("query: %+v", info)
-	log.Printf("query: %+v", SHAPE_CATEGORY_BOT)
-	if info == nil || info.Shape == nil {
-		return
+	if info != nil && info.Shape != nil {
+		if bot, ok := info.Shape.UserData.(*Bot); ok {
+			u.info = bot
+		}
 	}
-	bot, ok := info.Shape.UserData.(*Bot)
-	if !ok {
-		return
+
+	// info panel clicks
+	if u.info != nil {
+		// if clicked on follow button
+		fx, fy, fw, fh := u.FollowButtonDims()
+		fx += u.infoBaseX
+		fy += u.infoBaseY
+		log.Printf("click %d,%d, w,h: %d,%d, x,y: %.2f,%.2f", cursorX, cursorY, fw, fh, fx, fy)
+		if cursorX >= int(fx) && cursorX < int(fx)+fw &&
+			cursorY >= int(fy) && cursorY < int(fy)+fh {
+			if pos, ok := u.info.(Positioner); ok {
+				u.game.controls.follow = pos
+			}
+		}
 	}
-	u.info = bot
 }
 
 func (u *UI) uiImg(name string) *ebiten.Image {
@@ -199,7 +213,26 @@ func (u *UI) InfoScreen() *ebiten.Image {
 		24, 24,
 		color.White,
 	)
+
+	if _, ok := u.info.(Positioner); ok {
+		fx, fy, fw, fh := u.FollowButtonDims()
+		followButton := ebiten.NewImage(fw, fh)
+		followButton.Fill(color.RGBA{0xff, 0x90, 0, 0xff})
+		text.Draw(followButton,
+			"Follow",
+			u.game.assets.font,
+			38, 16,
+			color.White,
+		)
+		op.GeoM.Reset()
+		op.GeoM.Translate(fx, fy)
+		infoScreen.DrawImage(followButton, op)
+	}
 	return infoScreen
+}
+
+func (u *UI) FollowButtonDims() (x, y float64, w, h int) {
+	return 12, float64(u.game.h) - 54, 120, 24
 }
 
 func (u *UI) CodeScreen() *ebiten.Image {
