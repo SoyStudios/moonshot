@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -79,6 +80,8 @@ func Translate(token Token) Instruction {
 		return &Comment{}
 	case BEGIN:
 		return &Begin{}
+	case END:
+		return &End{}
 
 	case RDX:
 		return &ReadX{}
@@ -242,6 +245,26 @@ func (t Token) String() string {
 	}
 }
 
+func (a AST) String() string {
+	var b strings.Builder
+	var inSection bool
+	for _, inst := range a {
+		switch inst.(type) {
+		case *Begin:
+			inSection = true
+		case *End:
+			inSection = false
+		default:
+			if inSection {
+				b.WriteRune('\t')
+			}
+		}
+		b.WriteString(inst.String())
+		b.WriteRune('\n')
+	}
+	return b.String()
+}
+
 // instructions
 
 type Illegal struct{}
@@ -276,6 +299,21 @@ func (b *Begin) Parse(p *Parser, program *AST) error {
 	return nil
 }
 
+type End struct {
+	Section *Begin
+}
+
+func (e End) String() string {
+	return END.String()
+}
+func (e End) Run(m *Machine, code AST) {
+	m.run(m, code, func() {})
+}
+func (e *End) Parse(p *Parser, program *AST) error {
+	*program = append(*program, e)
+	return nil
+}
+
 type Nop struct{}
 
 func (n Nop) String() string {
@@ -294,7 +332,7 @@ type Comment struct {
 }
 
 func (n Comment) String() string {
-	return COMMENT.String()
+	return n.Lit
 }
 func (n Comment) Run(m *Machine, code AST) {
 	m.run(m, code, func() {})

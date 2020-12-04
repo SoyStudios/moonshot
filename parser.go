@@ -241,13 +241,13 @@ func (p *Parser) parseSection(section *AST, require Token) error {
 		if tok == EOF {
 			return fmt.Errorf("unexpected %s in evaluation section", EOF)
 		}
-		if tok == END {
-			break
-		}
 		inst := Translate(tok)
 		err := inst.Parse(p, section)
 		if err != nil {
 			return err
+		}
+		if tok == END {
+			break
 		}
 	}
 	// section can start with comments and must start with a BEGIN
@@ -268,7 +268,7 @@ func (p *Parser) parseSection(section *AST, require Token) error {
 	return nil
 }
 
-func (p *Parser) Parse() ([]*Gene, error) {
+func (p *Parser) Parse() (Program, error) {
 	pr := make([]*Gene, 0)
 	for {
 		if tok, _ := p.scanIgnoreWhitespace(); tok == EOF {

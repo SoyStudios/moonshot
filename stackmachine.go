@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -19,7 +20,7 @@ type (
 
 		pc int // program counter
 
-		program   []*Gene
+		program   Program
 		stack     *stack
 		registers [16]int16
 
@@ -27,6 +28,8 @@ type (
 
 		activated map[int]bool
 	}
+
+	Program []*Gene
 
 	runFunc func(*Machine, AST, func())
 
@@ -77,6 +80,17 @@ func (s *stack) Pop() int16 {
 	ret := (*s)[n]
 	*s = (*s)[:n]
 	return ret
+}
+
+func (p Program) String() string {
+	var b strings.Builder
+	for i, g := range p {
+		b.WriteString(g.String())
+		if i < len(p)-1 {
+			b.WriteRune('\n')
+		}
+	}
+	return b.String()
 }
 
 func NewMachine() *Machine {

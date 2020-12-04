@@ -77,8 +77,7 @@ END
 }
 
 func TestFullLanguage(t *testing.T) {
-	code := `
-BEGIN EV
+	code := `BEGIN EV
 	RDX
 	RDY
 	ABS
@@ -138,7 +137,7 @@ BEGIN EX
 	REP
 	IMP
 END
-	`
+`
 	p := NewParser(strings.NewReader(code))
 	program, err := p.Parse()
 	if err != nil {
@@ -187,11 +186,13 @@ END
 	if !stateMock.AssertExpectations(t) {
 		return
 	}
+	if !assert.Equal(t, code, program.String()) {
+		return
+	}
 }
 
 func TestTutorialBot(t *testing.T) {
-	code := `
-BEGIN EV
+	code := `BEGIN EV
 	// Read bot’s current energy level and push it to the stack
 	RDE
 	PSH CON 1000
@@ -218,7 +219,7 @@ BEGIN EX
 	NEG
 	THR
 END
-	`
+`
 	p := NewParser(strings.NewReader(code))
 	program, err := p.Parse()
 	if err != nil {
@@ -245,11 +246,14 @@ END
 	if !stateMock.AssertExpectations(t) {
 		return
 	}
+
+	if !assert.Equal(t, code, program.String()) {
+		return
+	}
 }
 
 func TestCommentBeforeBeginIsAllowed(t *testing.T) {
-	code := `
-// This comment should be allowed
+	code := `// This comment should be allowed
 BEGIN EV
 	PSH CON 1
 END
@@ -268,6 +272,9 @@ END
 		return
 	}
 	if !assert.Equal(t, "// This comment should be allowed", comment.Lit) {
+		return
+	}
+	if !assert.Equal(t, code, program.String()) {
 		return
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -45,4 +46,11 @@ func GeneDrawerFor(i int, g *Gene) GeneDrawer {
 			24, 80,
 			color.White)
 	}
+}
+
+func (g *Gene) String() string {
+	var b strings.Builder
+	b.WriteString(g.Evaluate.String())
+	b.WriteString(g.Execute.String())
+	return b.String()
 }
