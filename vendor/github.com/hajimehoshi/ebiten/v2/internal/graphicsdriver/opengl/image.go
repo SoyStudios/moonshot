@@ -15,38 +15,40 @@
 package opengl
 
 import (
-	"github.com/hajimehoshi/ebiten/v2/internal/driver"
+	"errors"
+
 	"github.com/hajimehoshi/ebiten/v2/internal/graphics"
+	"github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver"
 )
 
 type Image struct {
-	id            driver.ImageID
-	graphics      *Graphics
-	textureNative textureNative
-	framebuffer   *framebuffer
-	pbo           buffer
-	width         int
-	height        int
-	screen        bool
+	id          graphicsdriver.ImageID
+	graphics    *Graphics
+	texture     textureNative
+	stencil     renderbufferNative
+	framebuffer *framebuffer
+	width       int
+	height      int
+	screen      bool
 }
 
-func (i *Image) ID() driver.ImageID {
+func (i *Image) ID() graphicsdriver.ImageID {
 	return i.id
 }
 
 func (i *Image) IsInvalidated() bool {
-	return !i.graphics.context.isTexture(i.textureNative)
+	return !i.graphics.context.isTexture(i.texture)
 }
 
 func (i *Image) Dispose() {
-	if !i.pbo.equal(*new(buffer)) {
-		i.graphics.context.deleteBuffer(i.pbo)
-	}
 	if i.framebuffer != nil {
 		i.framebuffer.delete(&i.graphics.context)
 	}
-	if !i.textureNative.equal(*new(textureNative)) {
-		i.graphics.context.deleteTexture(i.textureNative)
+	if !i.texture.equal(*new(textureNative)) {
+		i.graphics.context.deleteTexture(i.texture)
+	}
+	if !i.stencil.equal(*new(renderbufferNative)) {
+		i.graphics.context.deleteRenderbuffer(i.stencil)
 	}
 
 	i.graphics.removeImage(i)
@@ -60,15 +62,13 @@ func (i *Image) setViewport() error {
 	return nil
 }
 
-func (i *Image) Pixels() ([]byte, error) {
+func (i *Image) ReadPixels(buf []byte) error {
 	if err := i.ensureFramebuffer(); err != nil {
-		return nil, err
+		return err
 	}
-	p, err := i.graphics.context.framebufferPixels(i.framebuffer, i.width, i.height)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
+
+	i.graphics.context.framebufferPixels(buf, i.framebuffer, i.width, i.height)
+	return nil
 }
 
 func (i *Image) framebufferSize() (int, int) {
@@ -91,7 +91,7 @@ func (i *Image) ensureFramebuffer() error {
 		i.framebuffer = newScreenFramebuffer(&i.graphics.context, w, h)
 		return nil
 	}
-	f, err := newFramebufferFromTexture(&i.graphics.context, i.textureNative, w, h)
+	f, err := newFramebufferFromTexture(&i.graphics.context, i.texture, w, h)
 	if err != nil {
 		return err
 	}
@@ -99,12 +99,33 @@ func (i *Image) ensureFramebuffer() error {
 	return nil
 }
 
-func (i *Image) ReplacePixels(args []*driver.ReplacePixelsArgs) {
+func (i *Image) ensureStencilBuffer() error {
+	if !i.stencil.equal(*new(renderbufferNative)) {
+		return nil
+	}
+
+	if err := i.ensureFramebuffer(); err != nil {
+		return err
+	}
+
+	r, err := i.graphics.context.newRenderbuffer(i.framebufferSize())
+	if err != nil {
+		return err
+	}
+	i.stencil = r
+
+	if err := i.graphics.context.bindStencilBuffer(i.framebuffer.native, i.stencil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (i *Image) WritePixels(args []*graphicsdriver.WritePixelsArgs) error {
 	if i.screen {
-		panic("opengl: ReplacePixels cannot be called on the screen, that doesn't have a texture")
+		return errors.New("opengl: WritePixels cannot be called on the screen")
 	}
 	if len(args) == 0 {
-		return
+		return nil
 	}
 
 	// glFlush is necessary on Android.
@@ -113,18 +134,6 @@ func (i *Image) ReplacePixels(args []*driver.ReplacePixelsArgs) {
 		i.graphics.context.flush()
 	}
 	i.graphics.drawCalled = false
-
-	w, h := i.width, i.height
-	if !i.graphics.context.canUsePBO() {
-		i.graphics.context.texSubImage2D(i.textureNative, w, h, args)
-		return
-	}
-	if i.pbo.equal(*new(buffer)) {
-		i.pbo = i.graphics.context.newPixelBufferObject(w, h)
-	}
-	if i.pbo.equal(*new(buffer)) {
-		panic("opengl: newPixelBufferObject failed")
-	}
-
-	i.graphics.context.replacePixelsWithPBO(i.pbo, i.textureNative, w, h, args)
+	i.graphics.context.texSubImage2D(i.texture, args)
+	return nil
 }

@@ -19,7 +19,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2/internal/driver"
+	"github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver"
 )
 
 // glslReservedKeywords is a set of reserved keywords that cannot be used as an indentifier on some environments.
@@ -61,11 +61,11 @@ func vertexShaderStr() string {
 	return src
 }
 
-func fragmentShaderStr(useColorM bool, filter driver.Filter, address driver.Address) string {
+func fragmentShaderStr(useColorM bool, filter graphicsdriver.Filter, address graphicsdriver.Address) string {
 	replaces := map[string]string{
-		"{{.AddressClampToZero}}": fmt.Sprintf("%d", driver.AddressClampToZero),
-		"{{.AddressRepeat}}":      fmt.Sprintf("%d", driver.AddressRepeat),
-		"{{.AddressUnsafe}}":      fmt.Sprintf("%d", driver.AddressUnsafe),
+		"{{.AddressClampToZero}}": fmt.Sprintf("%d", graphicsdriver.AddressClampToZero),
+		"{{.AddressRepeat}}":      fmt.Sprintf("%d", graphicsdriver.AddressRepeat),
+		"{{.AddressUnsafe}}":      fmt.Sprintf("%d", graphicsdriver.AddressUnsafe),
 	}
 	src := shaderStrFragment
 	for k, v := range replaces {
@@ -79,22 +79,22 @@ func fragmentShaderStr(useColorM bool, filter driver.Filter, address driver.Addr
 	}
 
 	switch filter {
-	case driver.FilterNearest:
+	case graphicsdriver.FilterNearest:
 		defs = append(defs, "#define FILTER_NEAREST")
-	case driver.FilterLinear:
+	case graphicsdriver.FilterLinear:
 		defs = append(defs, "#define FILTER_LINEAR")
-	case driver.FilterScreen:
+	case graphicsdriver.FilterScreen:
 		defs = append(defs, "#define FILTER_SCREEN")
 	default:
 		panic(fmt.Sprintf("opengl: invalid filter: %d", filter))
 	}
 
 	switch address {
-	case driver.AddressClampToZero:
+	case graphicsdriver.AddressClampToZero:
 		defs = append(defs, "#define ADDRESS_CLAMP_TO_ZERO")
-	case driver.AddressRepeat:
+	case graphicsdriver.AddressRepeat:
 		defs = append(defs, "#define ADDRESS_REPEAT")
-	case driver.AddressUnsafe:
+	case graphicsdriver.AddressUnsafe:
 		defs = append(defs, "#define ADDRESS_UNSAFE")
 	default:
 		panic(fmt.Sprintf("opengl: invalid address: %d", address))
@@ -117,7 +117,9 @@ varying vec4 varying_color_scale;
 
 void main(void) {
   varying_tex = A1;
-  varying_color_scale = A2;
+
+  // Fragment shader wants premultiplied alpha.
+  varying_color_scale = vec4(A2.rgb, 1) * A2.a;
 
   mat4 projection_matrix = mat4(
     vec4(2.0 / viewport_size.x, 0, 0, 0),
@@ -156,13 +158,6 @@ uniform highp float scale;
 varying highp vec2 varying_tex;
 varying highp vec4 varying_color_scale;
 
-highp float floorMod(highp float x, highp float y) {
-  if (x < 0.0) {
-    return y - (-x - y * floor(-x/y));
-  }
-  return x - y * floor(x/y);
-}
-
 highp vec2 adjustTexelByAddress(highp vec2 p, highp vec4 source_region) {
 #if defined(ADDRESS_CLAMP_TO_ZERO)
   return p;
@@ -171,7 +166,7 @@ highp vec2 adjustTexelByAddress(highp vec2 p, highp vec4 source_region) {
 #if defined(ADDRESS_REPEAT)
   highp vec2 o = vec2(source_region[0], source_region[1]);
   highp vec2 size = vec2(source_region[2] - source_region[0], source_region[3] - source_region[1]);
-  return vec2(floorMod((p.x - o.x), size.x) + o.x, floorMod((p.y - o.y), size.y) + o.y);
+  return vec2(mod((p.x - o.x), size.x) + o.x, mod((p.y - o.y), size.y) + o.y);
 #endif
 
 #if defined(ADDRESS_UNSAFE)
@@ -267,15 +262,17 @@ void main(void) {
   color.rgb /= color.a + (1.0 - sign(color.a));
   // Apply the color matrix or scale.
   color = (color_matrix_body * color) + color_matrix_translation;
-  color *= varying_color_scale;
   // Premultiply alpha
   color.rgb *= color.a;
+  // Apply color scale.
+  color *= varying_color_scale;
+  // Clamp the output.
+  color.rgb = min(color.rgb, color.a);
 # else
-  vec4 s = varying_color_scale;
-  color *= vec4(s.r, s.g, s.b, 1.0) * s.a;
+  // Apply color scale.
+  color *= varying_color_scale;
+  // No clamping needed as the color matrix shader is used then.
 # endif  // defined(USE_COLOR_MATRIX)
-
-  color = min(color, color.a);
 
   gl_FragColor = color;
 

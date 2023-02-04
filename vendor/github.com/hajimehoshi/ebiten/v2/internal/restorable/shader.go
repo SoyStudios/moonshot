@@ -24,10 +24,10 @@ type Shader struct {
 	ir     *shaderir.Program
 }
 
-func NewShader(program *shaderir.Program) *Shader {
+func NewShader(ir *shaderir.Program) *Shader {
 	s := &Shader{
-		shader: graphicscommand.NewShader(program),
-		ir:     program,
+		shader: graphicscommand.NewShader(ir),
+		ir:     ir,
 	}
 	theImages.addShader(s)
 	return s

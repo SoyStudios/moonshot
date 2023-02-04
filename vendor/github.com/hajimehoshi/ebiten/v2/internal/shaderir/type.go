@@ -77,11 +77,11 @@ func (t *Type) String() string {
 		str += "}"
 		return str
 	default:
-		return fmt.Sprintf("?(unknown type: %d)", t)
+		return fmt.Sprintf("?(unknown type: %d)", t.Main)
 	}
 }
 
-func (t *Type) FloatNum() int {
+func (t *Type) FloatCount() int {
 	switch t.Main {
 	case Float:
 		return 1
@@ -98,10 +98,26 @@ func (t *Type) FloatNum() int {
 	case Mat4:
 		return 16
 	case Array:
-		return t.Length * t.Sub[0].FloatNum()
+		return t.Length * t.Sub[0].FloatCount()
 	default: // TODO: Parse a struct correctly
 		return -1
 	}
+}
+
+func (t *Type) IsVector() bool {
+	switch t.Main {
+	case Vec2, Vec3, Vec4:
+		return true
+	}
+	return false
+}
+
+func (t *Type) IsMatrix() bool {
+	switch t.Main {
+	case Mat2, Mat3, Mat4:
+		return true
+	}
+	return false
 }
 
 type BasicType int
@@ -117,6 +133,7 @@ const (
 	Mat2
 	Mat3
 	Mat4
+	Texture
 	Array
 	Struct
 )
@@ -177,10 +194,8 @@ func (p *Program) LocalVariableType(topBlock, block *Block, idx int) Type {
 			return Type{Main: Vec4}
 		case idx < nv+1:
 			return p.Varyings[idx-1]
-		case idx == nv+1:
-			return Type{Main: Vec4}
 		default:
-			return localVariableType(p, topBlock, block, idx-(nv+2))
+			return localVariableType(p, topBlock, block, idx-(nv+1))
 		}
 	default:
 		return localVariableType(p, topBlock, block, idx)

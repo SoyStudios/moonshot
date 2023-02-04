@@ -18,26 +18,19 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2/internal/affine"
-	"github.com/hajimehoshi/ebiten/v2/internal/driver"
+	"github.com/hajimehoshi/ebiten/v2/internal/debug"
 	"github.com/hajimehoshi/ebiten/v2/internal/graphics"
+	"github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver"
 	"github.com/hajimehoshi/ebiten/v2/internal/png"
-)
-
-type lastCommand int
-
-const (
-	lastCommandNone lastCommand = iota
-	lastCommandClear
-	lastCommandDrawTriangles
-	lastCommandReplacePixels
 )
 
 // Image represents an image that is implemented with OpenGL.
 type Image struct {
-	image          driver.Image
+	image          graphicsdriver.Image
 	width          int
 	height         int
 	internalWidth  int
@@ -46,13 +39,11 @@ type Image struct {
 
 	// id is an indentifier for the image. This is used only when dummping the information.
 	//
-	// This is duplicated with driver.Image's ID, but this id is still necessary because this image might not
-	// have its driver.Image.
+	// This is duplicated with graphicsdriver.Image's ID, but this id is still necessary because this image might not
+	// have its graphicsdriver.Image.
 	id int
 
-	bufferedRP []*driver.ReplacePixelsArgs
-
-	lastCommand lastCommand
+	bufferedWP []*graphicsdriver.WritePixelsArgs
 }
 
 var nextID = 1
@@ -63,53 +54,59 @@ func genNextID() int {
 	return id
 }
 
+// unresolvedImages is the set of unresolved images.
+// An unresolved image is an image that might have an state unsent to the command queue yet.
+var unresolvedImages []*Image
+
+// addUnresolvedImage adds an image to the list of unresolved images.
+func addUnresolvedImage(img *Image) {
+	unresolvedImages = append(unresolvedImages, img)
+}
+
+// resolveImages resolves all the image states unsent to the command queue.
+// resolveImages should be called before flushing commands.
+func resolveImages() {
+	for i, img := range unresolvedImages {
+		img.resolveBufferedWritePixels()
+		unresolvedImages[i] = nil
+	}
+	unresolvedImages = unresolvedImages[:0]
+}
+
 // NewImage returns a new image.
 //
 // Note that the image is not initialized yet.
-func NewImage(width, height int) *Image {
+func NewImage(width, height int, screenFramebuffer bool) *Image {
 	i := &Image{
 		width:  width,
 		height: height,
+		screen: screenFramebuffer,
 		id:     genNextID(),
 	}
 	c := &newImageCommand{
 		result: i,
 		width:  width,
 		height: height,
+		screen: screenFramebuffer,
 	}
 	theCommandQueue.Enqueue(c)
 	return i
 }
 
-func NewScreenFramebufferImage(width, height int) *Image {
-	i := &Image{
-		width:  width,
-		height: height,
-		screen: true,
-		id:     genNextID(),
-	}
-	c := &newScreenFramebufferImageCommand{
-		result: i,
-		width:  width,
-		height: height,
-	}
-	theCommandQueue.Enqueue(c)
-	return i
-}
-
-func (i *Image) resolveBufferedReplacePixels() {
-	if len(i.bufferedRP) == 0 {
+func (i *Image) resolveBufferedWritePixels() {
+	if len(i.bufferedWP) == 0 {
 		return
 	}
-	c := &replacePixelsCommand{
+	c := &writePixelsCommand{
 		dst:  i,
-		args: i.bufferedRP,
+		args: i.bufferedWP,
 	}
 	theCommandQueue.Enqueue(c)
-	i.bufferedRP = nil
+	i.bufferedWP = nil
 }
 
 func (i *Image) Dispose() {
+	i.bufferedWP = nil
 	c := &disposeImageCommand{
 		target: i,
 	}
@@ -133,14 +130,14 @@ func (i *Image) InternalSize() (int, int) {
 //
 // The vertex floats are:
 //
-//   0: Destination X in pixels
-//   1: Destination Y in pixels
-//   2: Source X in pixels (not texels!)
-//   3: Source Y in pixels
-//   4: Color R [0.0-1.0]
-//   5: Color G
-//   6: Color B
-//   7: Color Y
+//	0: Destination X in pixels
+//	1: Destination Y in pixels
+//	2: Source X in texels
+//	3: Source Y in texels
+//	4: Color R [0.0-1.0]
+//	5: Color G
+//	6: Color B
+//	7: Color Y
 //
 // src and shader are exclusive and only either is non-nil.
 //
@@ -150,20 +147,14 @@ func (i *Image) InternalSize() (int, int) {
 //
 // If the source image is not specified, i.e., src is nil and there is no image in the uniform variables, the
 // elements for the source image are not used.
-func (i *Image) DrawTriangles(srcs [graphics.ShaderImageNum]*Image, offsets [graphics.ShaderImageNum - 1][2]float32, vertices []float32, indices []uint16, clr *affine.ColorM, mode driver.CompositeMode, filter driver.Filter, address driver.Address, sourceRegion driver.Region, shader *Shader, uniforms []interface{}) {
-	if i.lastCommand == lastCommandNone {
-		if !i.screen && mode != driver.CompositeModeClear {
-			panic("graphicscommand: the image must be cleared first")
-		}
-	}
-
+func (i *Image) DrawTriangles(srcs [graphics.ShaderImageCount]*Image, offsets [graphics.ShaderImageCount - 1][2]float32, vertices []float32, indices []uint16, clr affine.ColorM, mode graphicsdriver.CompositeMode, filter graphicsdriver.Filter, address graphicsdriver.Address, dstRegion, srcRegion graphicsdriver.Region, shader *Shader, uniforms [][]float32, evenOdd bool) {
 	if shader == nil {
 		// Fast path for rendering without a shader (#1355).
 		img := srcs[0]
 		if img.screen {
 			panic("graphicscommand: the screen image cannot be the rendering source")
 		}
-		img.resolveBufferedReplacePixels()
+		img.resolveBufferedWritePixels()
 	} else {
 		for _, src := range srcs {
 			if src == nil {
@@ -172,50 +163,38 @@ func (i *Image) DrawTriangles(srcs [graphics.ShaderImageNum]*Image, offsets [gra
 			if src.screen {
 				panic("graphicscommand: the screen image cannot be the rendering source")
 			}
-			src.resolveBufferedReplacePixels()
+			src.resolveBufferedWritePixels()
 		}
 	}
-	i.resolveBufferedReplacePixels()
+	i.resolveBufferedWritePixels()
 
-	theCommandQueue.EnqueueDrawTrianglesCommand(i, srcs, offsets, vertices, indices, clr, mode, filter, address, sourceRegion, shader, uniforms)
-
-	if i.lastCommand == lastCommandNone && !i.screen {
-		i.lastCommand = lastCommandClear
-	} else {
-		i.lastCommand = lastCommandDrawTriangles
-	}
+	theCommandQueue.EnqueueDrawTrianglesCommand(i, srcs, offsets, vertices, indices, clr, mode, filter, address, dstRegion, srcRegion, shader, uniforms, evenOdd)
 }
 
-// Pixels returns the image's pixels.
-// Pixels might return nil when OpenGL error happens.
-func (i *Image) Pixels() ([]byte, error) {
-	i.resolveBufferedReplacePixels()
-	c := &pixelsCommand{
-		result: nil,
+// ReadPixels reads the image's pixels.
+// ReadPixels returns an error when an error happens in the graphics driver.
+func (i *Image) ReadPixels(graphicsDriver graphicsdriver.Graphics, buf []byte) error {
+	i.resolveBufferedWritePixels()
+	c := &readPixelsCommand{
 		img:    i,
+		result: buf,
 	}
 	theCommandQueue.Enqueue(c)
-	if err := theCommandQueue.Flush(); err != nil {
-		return nil, err
+	if err := theCommandQueue.Flush(graphicsDriver); err != nil {
+		return err
 	}
-	return c.result, nil
+	return nil
 }
 
-func (i *Image) ReplacePixels(pixels []byte, x, y, width, height int) {
-	// ReplacePixels for a part might invalidate the current image that are drawn by DrawTriangles (#593, #738).
-	if i.lastCommand == lastCommandDrawTriangles {
-		if x != 0 || y != 0 || i.width != width || i.height != height {
-			panic("graphicscommand: ReplacePixels for a part after DrawTriangles is forbidden")
-		}
-	}
-	i.bufferedRP = append(i.bufferedRP, &driver.ReplacePixelsArgs{
+func (i *Image) WritePixels(pixels []byte, x, y, width, height int) {
+	i.bufferedWP = append(i.bufferedWP, &graphicsdriver.WritePixelsArgs{
 		Pixels: pixels,
 		X:      x,
 		Y:      y,
 		Width:  width,
 		Height: height,
 	})
-	i.lastCommand = lastCommandReplacePixels
+	addUnresolvedImage(i)
 }
 
 func (i *Image) IsInvalidated() bool {
@@ -238,7 +217,7 @@ func (i *Image) IsInvalidated() bool {
 // If blackbg is true, any alpha values in the dumped image will be 255.
 //
 // This is for testing usage.
-func (i *Image) Dump(path string, blackbg bool) error {
+func (i *Image) Dump(graphicsDriver graphicsdriver.Graphics, path string, blackbg bool, rect image.Rectangle) error {
 	// Screen image cannot be dumped.
 	if i.screen {
 		return nil
@@ -251,8 +230,8 @@ func (i *Image) Dump(path string, blackbg bool) error {
 	}
 	defer f.Close()
 
-	pix, err := i.Pixels()
-	if err != nil {
+	pix := make([]byte, 4*i.width*i.height)
+	if err := i.ReadPixels(graphicsDriver, pix); err != nil {
 		return err
 	}
 
@@ -262,12 +241,22 @@ func (i *Image) Dump(path string, blackbg bool) error {
 		}
 	}
 
-	if err := png.Encode(f, &image.RGBA{
+	if err := png.Encode(f, (&image.RGBA{
 		Pix:    pix,
 		Stride: 4 * i.width,
 		Rect:   image.Rect(0, 0, i.width, i.height),
-	}); err != nil {
+	}).SubImage(rect)); err != nil {
 		return err
 	}
 	return nil
+}
+
+func LogImagesInfo(images []*Image) {
+	sort.Slice(images, func(a, b int) bool {
+		return images[a].id < images[b].id
+	})
+	for _, i := range images {
+		w, h := i.InternalSize()
+		debug.Logf("  %d: (%d, %d)\n", i.id, w, h)
+	}
 }

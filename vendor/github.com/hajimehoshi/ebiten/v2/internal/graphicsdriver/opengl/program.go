@@ -16,12 +16,14 @@ package opengl
 
 import (
 	"fmt"
+	"runtime"
 
-	"github.com/hajimehoshi/ebiten/v2/internal/driver"
 	"github.com/hajimehoshi/ebiten/v2/internal/graphics"
+	"github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver"
 	"github.com/hajimehoshi/ebiten/v2/internal/shaderir"
-	"github.com/hajimehoshi/ebiten/v2/internal/web"
 )
+
+const floatSizeInBytes = 4
 
 // arrayBufferLayoutPart is a part of an array buffer layout.
 type arrayBufferLayoutPart struct {
@@ -54,7 +56,7 @@ func (a *arrayBufferLayout) totalBytes() int {
 	}
 	t := 0
 	for _, p := range a.parts {
-		t += float.SizeInBytes() * p.num
+		t += floatSizeInBytes * p.num
 	}
 	a.total = t
 	return a.total
@@ -62,27 +64,27 @@ func (a *arrayBufferLayout) totalBytes() int {
 
 // newArrayBuffer creates OpenGL's buffer object for the array buffer.
 func (a *arrayBufferLayout) newArrayBuffer(context *context) buffer {
-	return context.newArrayBuffer(a.totalBytes() * graphics.IndicesNum)
+	return context.newArrayBuffer(a.totalBytes() * graphics.IndicesCount)
 }
 
-// enable binds the array buffer the given program to use the array buffer.
-func (a *arrayBufferLayout) enable(context *context, program program) {
+// enable starts using the array buffer.
+func (a *arrayBufferLayout) enable(context *context) {
 	for i := range a.parts {
-		context.enableVertexAttribArray(program, i)
+		context.enableVertexAttribArray(i)
 	}
 	total := a.totalBytes()
 	offset := 0
 	for i, p := range a.parts {
-		context.vertexAttribPointer(program, i, p.num, float, total, offset)
-		offset += float.SizeInBytes() * p.num
+		context.vertexAttribPointer(i, p.num, total, offset)
+		offset += floatSizeInBytes * p.num
 	}
 }
 
 // disable stops using the array buffer.
-func (a *arrayBufferLayout) disable(context *context, program program) {
+func (a *arrayBufferLayout) disable(context *context) {
 	// TODO: Disabling should be done in reversed order?
 	for i := range a.parts {
-		context.disableVertexAttribArray(program, i)
+		context.disableVertexAttribArray(i)
 	}
 }
 
@@ -106,16 +108,16 @@ var theArrayBufferLayout = arrayBufferLayout{
 }
 
 func init() {
-	vertexFloatNum := theArrayBufferLayout.totalBytes() / float.SizeInBytes()
-	if graphics.VertexFloatNum != vertexFloatNum {
-		panic(fmt.Sprintf("vertex float num must be %d but %d", graphics.VertexFloatNum, vertexFloatNum))
+	vertexFloatCount := theArrayBufferLayout.totalBytes() / floatSizeInBytes
+	if graphics.VertexFloatCount != vertexFloatCount {
+		panic(fmt.Sprintf("vertex float num must be %d but %d", graphics.VertexFloatCount, vertexFloatCount))
 	}
 }
 
 type programKey struct {
 	useColorM bool
-	filter    driver.Filter
-	address   driver.Address
+	filter    graphicsdriver.Filter
+	address   graphicsdriver.Address
 }
 
 // openGLState is a state for
@@ -130,7 +132,7 @@ type openGLState struct {
 	programs map[programKey]program
 
 	lastProgram       program
-	lastUniforms      map[string]interface{}
+	lastUniforms      map[string][]float32
 	lastActiveTexture int
 }
 
@@ -146,7 +148,10 @@ func (s *openGLState) reset(context *context) error {
 	}
 
 	s.lastProgram = zeroProgram
-	s.lastUniforms = map[string]interface{}{}
+	context.useProgram(zeroProgram)
+	for key := range s.lastUniforms {
+		delete(s.lastUniforms, key)
+	}
 
 	// When context lost happens, deleting programs or buffers is not necessary.
 	// However, it is not assumed that reset is called only when context lost happens.
@@ -162,7 +167,7 @@ func (s *openGLState) reset(context *context) error {
 
 	// On browsers (at least Chrome), buffers are already detached from the context
 	// and must not be deleted by DeleteBuffer.
-	if !web.IsBrowser() {
+	if runtime.GOOS != "js" {
 		if !s.arrayBuffer.equal(zeroBuffer) {
 			context.deleteBuffer(s.arrayBuffer)
 		}
@@ -171,24 +176,24 @@ func (s *openGLState) reset(context *context) error {
 		}
 	}
 
-	shaderVertexModelviewNative, err := context.newShader(vertexShader, vertexShaderStr())
+	shaderVertexModelviewNative, err := context.newVertexShader(vertexShaderStr())
 	if err != nil {
 		panic(fmt.Sprintf("graphics: shader compiling error:\n%s", err))
 	}
 	defer context.deleteShader(shaderVertexModelviewNative)
 
 	for _, c := range []bool{false, true} {
-		for _, a := range []driver.Address{
-			driver.AddressClampToZero,
-			driver.AddressRepeat,
-			driver.AddressUnsafe,
+		for _, a := range []graphicsdriver.Address{
+			graphicsdriver.AddressClampToZero,
+			graphicsdriver.AddressRepeat,
+			graphicsdriver.AddressUnsafe,
 		} {
-			for _, f := range []driver.Filter{
-				driver.FilterNearest,
-				driver.FilterLinear,
-				driver.FilterScreen,
+			for _, f := range []graphicsdriver.Filter{
+				graphicsdriver.FilterNearest,
+				graphicsdriver.FilterLinear,
+				graphicsdriver.FilterScreen,
 			} {
-				shaderFragmentColorMatrixNative, err := context.newShader(fragmentShader, fragmentShaderStr(c, f, a))
+				shaderFragmentColorMatrixNative, err := context.newFragmentShader(fragmentShaderStr(c, f, a))
 				if err != nil {
 					panic(fmt.Sprintf("graphics: shader compiling error:\n%s", err))
 				}
@@ -217,7 +222,7 @@ func (s *openGLState) reset(context *context) error {
 	// Note that the indices passed to NewElementArrayBuffer is not under GC management
 	// in opengl package due to unsafe-way.
 	// See NewElementArrayBuffer in context_mobile.go.
-	s.elementArrayBuffer = context.newElementArrayBuffer(graphics.IndicesNum * 2)
+	s.elementArrayBuffer = context.newElementArrayBuffer(graphics.IndicesCount * 2)
 
 	return nil
 }
@@ -237,7 +242,7 @@ func areSameFloat32Array(a, b []float32) bool {
 
 type uniformVariable struct {
 	name  string
-	value interface{}
+	value []float32
 	typ   shaderir.Type
 }
 
@@ -246,59 +251,55 @@ type textureVariable struct {
 	native textureNative
 }
 
+func (g *Graphics) textureVariableName(idx int) string {
+	if v, ok := g.textureVariableNameCache[idx]; ok {
+		return v
+	}
+	if g.textureVariableNameCache == nil {
+		g.textureVariableNameCache = map[int]string{}
+	}
+	name := fmt.Sprintf("T%d", idx)
+	g.textureVariableNameCache[idx] = name
+	return name
+}
+
 // useProgram uses the program (programTexture).
-func (g *Graphics) useProgram(program program, uniforms []uniformVariable, textures [graphics.ShaderImageNum]textureVariable) error {
+func (g *Graphics) useProgram(program program, uniforms []uniformVariable, textures [graphics.ShaderImageCount]textureVariable) error {
 	if !g.state.lastProgram.equal(program) {
 		g.context.useProgram(program)
 		if g.state.lastProgram.equal(zeroProgram) {
-			theArrayBufferLayout.enable(&g.context, program)
-			g.context.bindBuffer(arrayBuffer, g.state.arrayBuffer)
-			g.context.bindBuffer(elementArrayBuffer, g.state.elementArrayBuffer)
+			theArrayBufferLayout.enable(&g.context)
+			g.context.bindArrayBuffer(g.state.arrayBuffer)
+			g.context.bindElementArrayBuffer(g.state.elementArrayBuffer)
 		}
 
 		g.state.lastProgram = program
-		g.state.lastUniforms = map[string]interface{}{}
+		for k := range g.state.lastUniforms {
+			delete(g.state.lastUniforms, k)
+		}
 		g.state.lastActiveTexture = 0
 		g.context.activeTexture(0)
 	}
 
 	for _, u := range uniforms {
-		switch v := u.value.(type) {
-		case float32:
-			if got, expected := (&shaderir.Type{Main: shaderir.Float}), &u.typ; !got.Equal(expected) {
-				return fmt.Errorf("opengl: uniform variable %s type doesn't match: expected %s but %s", u.name, expected.String(), got.String())
-			}
-
-			cached, ok := g.state.lastUniforms[u.name].(float32)
-			if ok && cached == v {
-				continue
-			}
-			// TODO: Remember whether the location is available or not.
-			g.context.uniformFloat(program, u.name, v)
-			g.state.lastUniforms[u.name] = v
-		case []float32:
-			if got, expected := len(v), u.typ.FloatNum(); got != expected {
-				return fmt.Errorf("opengl: length of a uniform variables %s (%s) doesn't match: expected %d but %d", u.name, u.typ.String(), expected, got)
-			}
-
-			cached, ok := g.state.lastUniforms[u.name].([]float32)
-			if ok && areSameFloat32Array(cached, v) {
-				continue
-			}
-			g.context.uniformFloats(program, u.name, v, u.typ)
-			g.state.lastUniforms[u.name] = v
-		default:
-			return fmt.Errorf("opengl: unexpected uniform value: %v (type: %T)", u.value, u.value)
+		if got, expected := len(u.value), u.typ.FloatCount(); got != expected {
+			// Copy a shaderir.Type value once. Do not pass u.typ directly to fmt.Errorf arguments, or
+			// the value u would be allocated on heap.
+			typ := u.typ
+			return fmt.Errorf("opengl: length of a uniform variables %s (%s) doesn't match: expected %d but %d", u.name, typ.String(), expected, got)
 		}
+
+		cached, ok := g.state.lastUniforms[u.name]
+		if ok && areSameFloat32Array(cached, u.value) {
+			continue
+		}
+		g.context.uniformFloats(program, u.name, u.value, u.typ)
+		if g.state.lastUniforms == nil {
+			g.state.lastUniforms = map[string][]float32{}
+		}
+		g.state.lastUniforms[u.name] = u.value
 	}
 
-	type activatedTexture struct {
-		textureNative textureNative
-		index         int
-	}
-
-	// textureNative cannot be a map key unfortunately.
-	textureToActivatedTexture := []activatedTexture{}
 	var idx int
 loop:
 	for i, t := range textures {
@@ -308,18 +309,18 @@ loop:
 
 		// If the texture is already bound, set the texture variable to point to the texture.
 		// Rebinding the same texture seems problematic (#1193).
-		for _, at := range textureToActivatedTexture {
+		for _, at := range g.activatedTextures {
 			if t.native.equal(at.textureNative) {
-				g.context.uniformInt(program, fmt.Sprintf("T%d", i), at.index)
+				g.context.uniformInt(program, g.textureVariableName(i), at.index)
 				continue loop
 			}
 		}
 
-		textureToActivatedTexture = append(textureToActivatedTexture, activatedTexture{
+		g.activatedTextures = append(g.activatedTextures, activatedTexture{
 			textureNative: t.native,
 			index:         idx,
 		})
-		g.context.uniformInt(program, fmt.Sprintf("T%d", i), idx)
+		g.context.uniformInt(program, g.textureVariableName(i), idx)
 		if g.state.lastActiveTexture != idx {
 			g.context.activeTexture(idx)
 			g.state.lastActiveTexture = idx
@@ -330,6 +331,11 @@ loop:
 
 		idx++
 	}
+
+	for i := range g.activatedTextures {
+		g.activatedTextures[i] = activatedTexture{}
+	}
+	g.activatedTextures = g.activatedTextures[:0]
 
 	return nil
 }

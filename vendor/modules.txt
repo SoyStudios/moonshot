@@ -1,6 +1,12 @@
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200707082815-5321531c36a2
+# github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744
+github.com/ebitengine/purego
+github.com/ebitengine/purego/internal/abi
+github.com/ebitengine/purego/internal/fakecgo
+github.com/ebitengine/purego/internal/strings
+github.com/ebitengine/purego/objc
+# github.com/go-gl/glfw/v3.3/glfw v0.0.0-20220806181222-55e207c401ad
 github.com/go-gl/glfw/v3.3/glfw
 github.com/go-gl/glfw/v3.3/glfw/glfw/deps
 github.com/go-gl/glfw/v3.3/glfw/glfw/deps/glad
@@ -8,62 +14,78 @@ github.com/go-gl/glfw/v3.3/glfw/glfw/deps/mingw
 github.com/go-gl/glfw/v3.3/glfw/glfw/deps/vs2008
 github.com/go-gl/glfw/v3.3/glfw/glfw/include/GLFW
 github.com/go-gl/glfw/v3.3/glfw/glfw/src
-# github.com/go-kit/kit v0.10.0
+# github.com/go-kit/kit v0.12.0
 github.com/go-kit/kit/log
-# github.com/go-logfmt/logfmt v0.5.0
+# github.com/go-kit/log v0.2.0
+github.com/go-kit/log
+# github.com/go-logfmt/logfmt v0.5.1
 github.com/go-logfmt/logfmt
 # github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 github.com/golang/freetype/raster
 github.com/golang/freetype/truetype
-# github.com/hajimehoshi/ebiten/v2 v2.0.1
+# github.com/hajimehoshi/ebiten/v2 v2.4.13
 github.com/hajimehoshi/ebiten/v2
 github.com/hajimehoshi/ebiten/v2/ebitenutil
-github.com/hajimehoshi/ebiten/v2/ebitenutil/internal/assets
 github.com/hajimehoshi/ebiten/v2/inpututil
 github.com/hajimehoshi/ebiten/v2/internal/affine
+github.com/hajimehoshi/ebiten/v2/internal/atlas
 github.com/hajimehoshi/ebiten/v2/internal/buffered
 github.com/hajimehoshi/ebiten/v2/internal/clock
-github.com/hajimehoshi/ebiten/v2/internal/colormcache
+github.com/hajimehoshi/ebiten/v2/internal/cocoa
+github.com/hajimehoshi/ebiten/v2/internal/debug
 github.com/hajimehoshi/ebiten/v2/internal/devicescale
-github.com/hajimehoshi/ebiten/v2/internal/driver
+github.com/hajimehoshi/ebiten/v2/internal/gamepad
+github.com/hajimehoshi/ebiten/v2/internal/gamepaddb
 github.com/hajimehoshi/ebiten/v2/internal/glfw
+github.com/hajimehoshi/ebiten/v2/internal/glfwwin
 github.com/hajimehoshi/ebiten/v2/internal/graphics
 github.com/hajimehoshi/ebiten/v2/internal/graphicscommand
+github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver
+github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/directx
 github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal
 github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal/ca
 github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal/mtl
 github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal/ns
 github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/opengl
 github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/opengl/gl
+github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/opengl/gles
 github.com/hajimehoshi/ebiten/v2/internal/hooks
 github.com/hajimehoshi/ebiten/v2/internal/jsutil
+github.com/hajimehoshi/ebiten/v2/internal/microsoftgdk
 github.com/hajimehoshi/ebiten/v2/internal/mipmap
+github.com/hajimehoshi/ebiten/v2/internal/nintendosdk
 github.com/hajimehoshi/ebiten/v2/internal/packing
 github.com/hajimehoshi/ebiten/v2/internal/png
 github.com/hajimehoshi/ebiten/v2/internal/restorable
 github.com/hajimehoshi/ebiten/v2/internal/shader
 github.com/hajimehoshi/ebiten/v2/internal/shaderir
 github.com/hajimehoshi/ebiten/v2/internal/shaderir/glsl
-github.com/hajimehoshi/ebiten/v2/internal/shaderir/metal
-github.com/hajimehoshi/ebiten/v2/internal/shareable
+github.com/hajimehoshi/ebiten/v2/internal/shaderir/hlsl
+github.com/hajimehoshi/ebiten/v2/internal/shaderir/msl
 github.com/hajimehoshi/ebiten/v2/internal/thread
-github.com/hajimehoshi/ebiten/v2/internal/uidriver/glfw
-github.com/hajimehoshi/ebiten/v2/internal/uidriver/js
-github.com/hajimehoshi/ebiten/v2/internal/uidriver/mobile
-github.com/hajimehoshi/ebiten/v2/internal/web
+github.com/hajimehoshi/ebiten/v2/internal/ui
+github.com/hajimehoshi/ebiten/v2/internal/vibrate
 github.com/hajimehoshi/ebiten/v2/text
-# github.com/jakecoffman/cp v1.1.0
+github.com/hajimehoshi/ebiten/v2/vector
+# github.com/hajimehoshi/file2byteslice v0.0.0-20210813153925-5340248a8f41
+github.com/hajimehoshi/file2byteslice
+# github.com/jakecoffman/cp v1.2.1
 github.com/jakecoffman/cp
-# github.com/pkg/errors v0.8.1
+# github.com/jezek/xgb v1.0.1
+github.com/jezek/xgb
+github.com/jezek/xgb/randr
+github.com/jezek/xgb/render
+github.com/jezek/xgb/xproto
+# github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/stretchr/objx v0.1.1
+# github.com/stretchr/objx v0.5.0
 github.com/stretchr/objx
-# github.com/stretchr/testify v1.4.0
+# github.com/stretchr/testify v1.8.1
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
-# golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56
+# golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6
 golang.org/x/exp/shiny/driver/gldriver
 golang.org/x/exp/shiny/driver/internal/drawer
 golang.org/x/exp/shiny/driver/internal/errscreen
@@ -72,11 +94,11 @@ golang.org/x/exp/shiny/driver/internal/lifecycler
 golang.org/x/exp/shiny/driver/internal/win32
 golang.org/x/exp/shiny/driver/internal/x11key
 golang.org/x/exp/shiny/screen
-# golang.org/x/image v0.0.0-20200927104501-e162460cd6b5
+# golang.org/x/image v0.1.0
 golang.org/x/image/font
 golang.org/x/image/math/f64
 golang.org/x/image/math/fixed
-# golang.org/x/mobile v0.0.0-20200801112145-973feb4309de
+# golang.org/x/mobile v0.0.0-20220722155234-aaac322e2105
 golang.org/x/mobile/app
 golang.org/x/mobile/app/internal/callfn
 golang.org/x/mobile/event/key
@@ -88,8 +110,9 @@ golang.org/x/mobile/event/touch
 golang.org/x/mobile/geom
 golang.org/x/mobile/gl
 golang.org/x/mobile/internal/mobileinit
-# golang.org/x/sys v0.0.0-20201009025420-dfb3f7c4e634
+# golang.org/x/sys v0.0.0-20220818161305-2296e01440c6
 golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/unix
 golang.org/x/sys/windows
-# gopkg.in/yaml.v2 v2.2.2
-gopkg.in/yaml.v2
+# gopkg.in/yaml.v3 v3.0.1
+gopkg.in/yaml.v3

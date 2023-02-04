@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build darwin
+//go:build ios
 // +build ios
 
 package metal
 
-// #cgo CFLAGS: -x objective-c
-// #cgo LDFLAGS: -framework UIKit
+// Suppress the warnings about availability guard with -Wno-unguarded-availability-new.
+// It is because old Xcode (8 or older?) does not accept @available syntax.
+
+// #cgo CFLAGS: -Wno-unguarded-availability-new -x objective-c
+// #cgo LDFLAGS: -framework UIKit -framework QuartzCore -framework Foundation -framework CoreGraphics
 //
 // #import <UIKit/UIKit.h>
 //
@@ -55,6 +58,15 @@ func (v *view) update() {
 		C.addSublayer(unsafe.Pointer(v.uiview), v.ml.Layer())
 	})
 	C.setFrame(v.ml.Layer(), unsafe.Pointer(v.uiview))
+}
+
+func (v *view) usePresentsWithTransaction() bool {
+	// Do not use presentsWithTransaction on iOS (#1799).
+	return false
+}
+
+func (v *view) maximumDrawableCount() int {
+	return 3
 }
 
 const (

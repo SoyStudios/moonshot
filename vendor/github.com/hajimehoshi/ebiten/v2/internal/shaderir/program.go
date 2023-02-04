@@ -51,8 +51,7 @@ type VertexFunc struct {
 
 // FragmentFunc takes pseudo params, and the number is len(varyings) + 2.
 // If index == 0, the param represents the coordinate of the fragment (gl_FragCoord in GLSL).
-// If index == len(varyings), the param represents (index-1)th verying variable.
-// If index == len(varyings)+1, the param is an out-param representing the color of the pixel (gl_FragColor in GLSL).
+// If 0 < index <= len(varyings), the param represents (index-1)th verying variable.
 type FragmentFunc struct {
 	Block *Block
 }
@@ -131,31 +130,34 @@ const (
 	Index
 )
 
-type Op string
+type Op int
 
 const (
-	Add                Op = "+"
-	Sub                Op = "-"
-	NotOp              Op = "!"
-	Mul                Op = "*"
-	Div                Op = "/"
-	ModOp              Op = "%"
-	LeftShift          Op = "<<"
-	RightShift         Op = ">>"
-	LessThanOp         Op = "<"
-	LessThanEqualOp    Op = "<="
-	GreaterThanOp      Op = ">"
-	GreaterThanEqualOp Op = ">="
-	EqualOp            Op = "=="
-	NotEqualOp         Op = "!="
-	And                Op = "&"
-	Xor                Op = "^"
-	Or                 Op = "|"
-	AndAnd             Op = "&&"
-	OrOr               Op = "||"
+	Add Op = iota
+	Sub
+	NotOp
+	ComponentWiseMul
+	MatrixMul
+	Div
+	ModOp
+	LeftShift
+	RightShift
+	LessThanOp
+	LessThanEqualOp
+	GreaterThanOp
+	GreaterThanEqualOp
+	EqualOp
+	NotEqualOp
+	VectorEqualOp
+	VectorNotEqualOp
+	And
+	Xor
+	Or
+	AndAnd
+	OrOr
 )
 
-func OpFromToken(t token.Token) (Op, bool) {
+func OpFromToken(t token.Token, lhs, rhs Type) (Op, bool) {
 	switch t {
 	case token.ADD:
 		return Add, true
@@ -164,7 +166,10 @@ func OpFromToken(t token.Token) (Op, bool) {
 	case token.NOT:
 		return NotOp, true
 	case token.MUL:
-		return Mul, true
+		if lhs.IsMatrix() || rhs.IsMatrix() {
+			return MatrixMul, true
+		}
+		return ComponentWiseMul, true
 	case token.QUO:
 		return Div, true
 	case token.REM:
@@ -182,8 +187,14 @@ func OpFromToken(t token.Token) (Op, bool) {
 	case token.GEQ:
 		return GreaterThanEqualOp, true
 	case token.EQL:
+		if lhs.IsVector() || rhs.IsVector() {
+			return VectorEqualOp, true
+		}
 		return EqualOp, true
 	case token.NEQ:
+		if lhs.IsVector() || rhs.IsVector() {
+			return VectorNotEqualOp, true
+		}
 		return NotEqualOp, true
 	case token.AND:
 		return And, true
@@ -196,13 +207,14 @@ func OpFromToken(t token.Token) (Op, bool) {
 	case token.LOR:
 		return OrOr, true
 	}
-	return "", false
+	return 0, false
 }
 
 type BuiltinFunc string
 
 const (
 	Len         BuiltinFunc = "len"
+	Cap         BuiltinFunc = "cap"
 	BoolF       BuiltinFunc = "bool"
 	IntF        BuiltinFunc = "int"
 	FloatF      BuiltinFunc = "float"
@@ -212,8 +224,8 @@ const (
 	Mat2F       BuiltinFunc = "mat2"
 	Mat3F       BuiltinFunc = "mat3"
 	Mat4F       BuiltinFunc = "mat4"
-	Radians     BuiltinFunc = "radians"
-	Degrees     BuiltinFunc = "degrees"
+	Radians     BuiltinFunc = "radians" // This function is not used yet (#2253)
+	Degrees     BuiltinFunc = "degrees" // This function is not used yet (#2253)
 	Sin         BuiltinFunc = "sin"
 	Cos         BuiltinFunc = "cos"
 	Tan         BuiltinFunc = "tan"
@@ -247,16 +259,19 @@ const (
 	Normalize   BuiltinFunc = "normalize"
 	Faceforward BuiltinFunc = "faceforward"
 	Reflect     BuiltinFunc = "reflect"
+	Refract     BuiltinFunc = "refract"
 	Transpose   BuiltinFunc = "transpose"
 	Texture2DF  BuiltinFunc = "texture2D"
 	Dfdx        BuiltinFunc = "dfdx"
 	Dfdy        BuiltinFunc = "dfdy"
 	Fwidth      BuiltinFunc = "fwidth"
+	DiscardF    BuiltinFunc = "discard"
 )
 
 func ParseBuiltinFunc(str string) (BuiltinFunc, bool) {
 	switch BuiltinFunc(str) {
 	case Len,
+		Cap,
 		BoolF,
 		IntF,
 		FloatF,
@@ -299,11 +314,13 @@ func ParseBuiltinFunc(str string) (BuiltinFunc, bool) {
 		Normalize,
 		Faceforward,
 		Reflect,
+		Refract,
 		Transpose,
 		Texture2DF,
 		Dfdx,
 		Dfdy,
-		Fwidth:
+		Fwidth,
+		DiscardF:
 		return BuiltinFunc(str), true
 	}
 	return "", false
@@ -344,4 +361,56 @@ func IsValidSwizzling(s string) bool {
 		return true
 	}
 	return false
+}
+
+func (p *Program) ReferredFuncIndicesInVertexShader() []int {
+	return p.referredFuncIndicesInBlockEntryPoint(p.VertexFunc.Block)
+}
+
+func (p *Program) ReferredFuncIndicesInFragmentShader() []int {
+	return p.referredFuncIndicesInBlockEntryPoint(p.FragmentFunc.Block)
+}
+
+func (p *Program) referredFuncIndicesInBlockEntryPoint(b *Block) []int {
+	indexToFunc := map[int]*Func{}
+	for _, f := range p.Funcs {
+		f := f
+		indexToFunc[f.Index] = &f
+	}
+	visited := map[int]struct{}{}
+	return referredFuncIndicesInBlock(b, indexToFunc, visited)
+}
+
+func referredFuncIndicesInBlock(b *Block, indexToFunc map[int]*Func, visited map[int]struct{}) []int {
+	if b == nil {
+		return nil
+	}
+
+	var fs []int
+
+	for _, s := range b.Stmts {
+		for _, e := range s.Exprs {
+			fs = append(fs, referredFuncIndicesInExpr(&e, indexToFunc, visited)...)
+		}
+		for _, bb := range s.Blocks {
+			fs = append(fs, referredFuncIndicesInBlock(bb, indexToFunc, visited)...)
+		}
+	}
+	return fs
+}
+
+func referredFuncIndicesInExpr(e *Expr, indexToFunc map[int]*Func, visited map[int]struct{}) []int {
+	var fs []int
+
+	if e.Type == FunctionExpr {
+		if _, ok := visited[e.Index]; !ok {
+			fs = append(fs, e.Index)
+			visited[e.Index] = struct{}{}
+			fs = append(fs, referredFuncIndicesInBlock(indexToFunc[e.Index].Block, indexToFunc, visited)...)
+		}
+	}
+	for _, ee := range e.Exprs {
+		fs = append(fs, referredFuncIndicesInExpr(&ee, indexToFunc, visited)...)
+	}
+	return fs
 }

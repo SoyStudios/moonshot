@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !js
 // +build !js
 
 package glfw
@@ -25,16 +26,17 @@ type (
 	ErrorCode       int
 	Hint            int
 	InputMode       int
-	Joystick        int
 	Key             int
 	ModifierKey     int
 	MouseButton     int
 	PeripheralEvent int
+	StandardCursor  int
 )
 
 const (
-	False = 0
-	True  = 1
+	DontCare = -1
+	False    = 0
+	True     = 1
 )
 
 const (
@@ -53,25 +55,6 @@ const (
 	MouseButtonLeft   = MouseButton(0)
 	MouseButtonRight  = MouseButton(1)
 	MouseButtonMiddle = MouseButton(2)
-)
-
-const (
-	Joystick1  = Joystick(0)
-	Joystick2  = Joystick(1)
-	Joystick3  = Joystick(2)
-	Joystick4  = Joystick(3)
-	Joystick5  = Joystick(4)
-	Joystick6  = Joystick(5)
-	Joystick7  = Joystick(6)
-	Joystick8  = Joystick(7)
-	Joystick9  = Joystick(8)
-	Joystick10 = Joystick(9)
-	Joystick11 = Joystick(10)
-	Joystick12 = Joystick(11)
-	Joystick13 = Joystick(12)
-	Joystick14 = Joystick(13)
-	Joystick15 = Joystick(14)
-	Joystick16 = Joystick(15)
 )
 
 const (
@@ -143,3 +126,12 @@ func (e ErrorCode) String() string {
 		return fmt.Sprintf("GLFW error code (%d)", e)
 	}
 }
+
+const (
+	ArrowCursor     = StandardCursor(0x00036001)
+	IBeamCursor     = StandardCursor(0x00036002)
+	CrosshairCursor = StandardCursor(0x00036003)
+	HandCursor      = StandardCursor(0x00036004)
+	HResizeCursor   = StandardCursor(0x00036005)
+	VResizeCursor   = StandardCursor(0x00036006)
+)

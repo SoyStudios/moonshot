@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !android
-// +build !js
-// +build !ios
+//go:build !android && !ios && !js
+// +build !android,!ios,!js
 
 package ebiten
 
@@ -23,7 +22,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2/internal/shareable"
+	"github.com/hajimehoshi/ebiten/v2/internal/debug"
+	"github.com/hajimehoshi/ebiten/v2/internal/ui"
 )
 
 // availableFilename returns a filename that is valid as a new file or directory.
@@ -53,7 +53,7 @@ func takeScreenshot(screen *Image) error {
 	}
 
 	blackbg := !IsScreenTransparent()
-	if err := screen.mipmap.Dump(newname, blackbg); err != nil {
+	if err := screen.image.DumpScreenshot(newname, blackbg); err != nil {
 		return err
 	}
 
@@ -73,7 +73,7 @@ func dumpInternalImages() error {
 		return err
 	}
 
-	if err := shareable.DumpImages(dir); err != nil {
+	if err := ui.DumpImages(dir); err != nil {
 		return err
 	}
 
@@ -99,15 +99,26 @@ type imageDumper struct {
 	err error
 }
 
+func envScreenshotKey() string {
+	if env := os.Getenv("EBITENGINE_SCREENSHOT_KEY"); env != "" {
+		return env
+	}
+	// For backward compatibility, read the EBITEN_ version.
+	return os.Getenv("EBITEN_SCREENSHOT_KEY")
+}
+
+func envInternalImagesKey() string {
+	if env := os.Getenv("EBITENGINE_INTERNAL_IMAGES_KEY"); env != "" {
+		return env
+	}
+	// For backward compatibility, read the EBITEN_ version.
+	return os.Getenv("EBITEN_INTERNAL_IMAGES_KEY")
+}
+
 func (i *imageDumper) update() error {
 	if i.err != nil {
 		return i.err
 	}
-
-	const (
-		envScreenshotKey     = "EBITEN_SCREENSHOT_KEY"
-		envInternalImagesKey = "EBITEN_INTERNAL_IMAGES_KEY"
-	)
 
 	if err := i.g.Update(); err != nil {
 		return err
@@ -117,21 +128,21 @@ func (i *imageDumper) update() error {
 	if i.keyState == nil {
 		i.keyState = map[Key]int{}
 
-		if keyname := os.Getenv(envScreenshotKey); keyname != "" {
+		if keyname := envScreenshotKey(); keyname != "" {
 			if key, ok := keyNameToKeyCode(keyname); ok {
 				i.hasScreenshotKey = true
 				i.screenshotKey = key
 			}
 		}
 
-		if keyname := os.Getenv(envInternalImagesKey); keyname != "" {
-			if isDebug() {
+		if keyname := envInternalImagesKey(); keyname != "" {
+			if debug.IsDebug {
 				if key, ok := keyNameToKeyCode(keyname); ok {
 					i.hasDumpInternalImagesKey = true
 					i.dumpInternalImagesKey = key
 				}
 			} else {
-				fmt.Fprintf(os.Stderr, "%s is disabled. Specify a build tag 'ebitendebug' to enable it.\n", envInternalImagesKey)
+				fmt.Fprintf(os.Stderr, "EBITENGINE_INTERNAL_IMAGES_KEY is disabled. Specify a build tag 'ebitenginedebug' to enable it.\n")
 			}
 		}
 	}

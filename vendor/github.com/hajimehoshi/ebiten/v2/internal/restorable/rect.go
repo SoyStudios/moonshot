@@ -21,92 +21,110 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/internal/graphicscommand"
 )
 
-type rectToPixels struct {
-	m map[image.Rectangle][]byte
-
-	lastR   image.Rectangle
-	lastPix []byte
+type pixelsRecord struct {
+	rect image.Rectangle
+	pix  []byte
 }
 
-func (rtp *rectToPixels) addOrReplace(pixels []byte, x, y, width, height int) {
-	if len(pixels) != 4*width*height {
-		panic(fmt.Sprintf("restorable: len(pixels) must be %d but %d", 4*width*height, len(pixels)))
-	}
-
-	if rtp.m == nil {
-		rtp.m = map[image.Rectangle][]byte{}
-	}
-
-	newr := image.Rect(x, y, x+width, y+height)
-	for r := range rtp.m {
-		if r == newr {
-			// Replace the region.
-			rtp.m[r] = pixels
-			if r == rtp.lastR {
-				rtp.lastPix = pixels
-			}
-			return
+func (p *pixelsRecord) clearIfOverlapped(rect image.Rectangle) {
+	r := p.rect.Intersect(rect)
+	ox := r.Min.X - p.rect.Min.X
+	oy := r.Min.Y - p.rect.Min.Y
+	w := p.rect.Dx()
+	for j := 0; j < r.Dy(); j++ {
+		for i := 0; i < r.Dx(); i++ {
+			idx := 4 * ((oy+j)*w + ox + i)
+			p.pix[idx] = 0
+			p.pix[idx+1] = 0
+			p.pix[idx+2] = 0
+			p.pix[idx+3] = 0
 		}
-		if r.Overlaps(newr) {
-			panic(fmt.Sprintf("restorable: region (%#v) conflicted with the other region (%#v)", newr, r))
-		}
-	}
-
-	// Add the region.
-	rtp.m[newr] = pixels
-	if newr == rtp.lastR {
-		rtp.lastPix = pixels
 	}
 }
 
-func (rtp *rectToPixels) remove(x, y, width, height int) {
-	if rtp.m == nil {
+func (p *pixelsRecord) readPixels(pixels []byte, x, y, width, height, imageWidth, imageHeight int) {
+	r := p.rect.Intersect(image.Rect(x, y, x+width, y+height)).Intersect(image.Rect(0, 0, imageWidth, imageHeight))
+	if r.Empty() {
 		return
 	}
 
+	dstBaseX := r.Min.X - x
+	dstBaseY := r.Min.Y - y
+	srcBaseX := r.Min.X - p.rect.Min.X
+	srcBaseY := r.Min.Y - p.rect.Min.Y
+	lineWidth := 4 * r.Dx()
+	for j := 0; j < r.Dy(); j++ {
+		dstX := 4 * ((dstBaseY+j)*width + dstBaseX)
+		srcX := 4 * ((srcBaseY+j)*p.rect.Dx() + srcBaseX)
+		copy(pixels[dstX:dstX+lineWidth], p.pix[srcX:srcX+lineWidth])
+	}
+}
+
+type pixelsRecords struct {
+	records []*pixelsRecord
+}
+
+func (pr *pixelsRecords) addOrReplace(pixels []byte, x, y, width, height int) {
+	if len(pixels) != 4*width*height {
+		msg := fmt.Sprintf("restorable: len(pixels) must be 4*%d*%d = %d but %d", width, height, 4*width*height, len(pixels))
+		if pixels == nil {
+			msg += " (nil)"
+		}
+		panic(msg)
+	}
+
+	rect := image.Rect(x, y, x+width, y+height)
+
+	// Remove or update the duplicated records first.
+	var n int
+	for _, r := range pr.records {
+		if r.rect.In(rect) {
+			continue
+		}
+		pr.records[n] = r
+		n++
+	}
+	for i := n; i < len(pr.records); i++ {
+		pr.records[i] = nil
+	}
+	pr.records = pr.records[:n]
+
+	// Add the new record.
+	pr.records = append(pr.records, &pixelsRecord{
+		rect: rect,
+		pix:  pixels,
+	})
+}
+
+func (pr *pixelsRecords) clear(x, y, width, height int) {
 	newr := image.Rect(x, y, x+width, y+height)
-	for r := range rtp.m {
-		if r == newr {
-			delete(rtp.m, r)
-			return
+	var n int
+	for _, r := range pr.records {
+		if r.rect.In(newr) {
+			continue
 		}
+		r.clearIfOverlapped(newr)
+		pr.records[n] = r
+		n++
+	}
+	for i := n; i < len(pr.records); i++ {
+		pr.records[i] = nil
+	}
+	pr.records = pr.records[:n]
+}
+
+func (pr *pixelsRecords) readPixels(pixels []byte, x, y, width, height, imageWidth, imageHeight int) {
+	for i := range pixels {
+		pixels[i] = 0
+	}
+	for _, r := range pr.records {
+		r.readPixels(pixels, x, y, width, height, imageWidth, imageHeight)
 	}
 }
 
-func (rtp *rectToPixels) at(i, j int) (byte, byte, byte, byte, bool) {
-	if rtp.m == nil {
-		return 0, 0, 0, 0, false
-	}
-
-	var pix []byte
-
-	var r *image.Rectangle
-	if pt := image.Pt(i, j); pt.In(rtp.lastR) {
-		r = &rtp.lastR
-		pix = rtp.lastPix
-	} else {
-		for rr := range rtp.m {
-			if pt.In(rr) {
-				r = &rr
-				rtp.lastR = rr
-				pix = rtp.m[rr]
-				rtp.lastPix = pix
-				break
-			}
-		}
-	}
-
-	if r == nil {
-		return 0, 0, 0, 0, false
-	}
-
-	idx := 4 * ((j-r.Min.Y)*r.Dx() + (i - r.Min.X))
-	return pix[idx], pix[idx+1], pix[idx+2], pix[idx+3], true
-}
-
-func (rtp *rectToPixels) apply(img *graphicscommand.Image) {
+func (pr *pixelsRecords) apply(img *graphicscommand.Image) {
 	// TODO: Isn't this too heavy? Can we merge the operations?
-	for r, pix := range rtp.m {
-		img.ReplacePixels(pix, r.Min.X, r.Min.Y, r.Dx(), r.Dy())
+	for _, r := range pr.records {
+		img.WritePixels(r.pix, r.rect.Min.X, r.rect.Min.Y, r.rect.Dx(), r.rect.Dy())
 	}
 }

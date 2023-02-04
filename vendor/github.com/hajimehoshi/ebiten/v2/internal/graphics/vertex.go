@@ -15,30 +15,36 @@
 package graphics
 
 import (
-	"github.com/hajimehoshi/ebiten/v2/internal/web"
+	"sync"
 )
 
 const (
-	ShaderImageNum = 4
+	ShaderImageCount = 4
 
-	// PreservedUniformVariablesNum represents the number of preserved uniform variables.
+	// PreservedUniformVariablesCount represents the number of preserved uniform variables.
 	// Any shaders in Ebiten must have these uniform variables.
-	PreservedUniformVariablesNum = 1 + // the destination texture size
+	PreservedUniformVariablesCount = 1 + // the destination texture size
 		1 + // the texture sizes array
+		1 + // the texture destination region's origin
+		1 + // the texture destination region's size
 		1 + // the offsets array of the second and the following images
 		1 + // the texture source region's origin
-		1 // the texture source region's size
+		1 + // the texture source region's size
+		1 // the projection matrix
 
-	DestinationTextureSizeUniformVariableIndex    = 0
-	TextureSizesUniformVariableIndex              = 1
-	TextureSourceOffsetsUniformVariableIndex      = 2
-	TextureSourceRegionOriginUniformVariableIndex = 3
-	TextureSourceRegionSizeUniformVariableIndex   = 4
+	TextureDestinationSizeUniformVariableIndex         = 0
+	TextureSourceSizesUniformVariableIndex             = 1
+	TextureDestinationRegionOriginUniformVariableIndex = 2
+	TextureDestinationRegionSizeUniformVariableIndex   = 3
+	TextureSourceOffsetsUniformVariableIndex           = 4
+	TextureSourceRegionOriginUniformVariableIndex      = 5
+	TextureSourceRegionSizeUniformVariableIndex        = 6
+	ProjectionMatrixUniformVariableIndex               = 7
 )
 
 const (
-	IndicesNum     = (1 << 16) / 3 * 3 // Adjust num for triangles.
-	VertexFloatNum = 8
+	IndicesCount     = (1 << 16) / 3 * 3 // Adjust num for triangles.
+	VertexFloatCount = 8
 )
 
 var (
@@ -50,55 +56,99 @@ func QuadIndices() []uint16 {
 }
 
 var (
-	theVerticesBackend = &verticesBackend{
-		backend: make([]float32, VertexFloatNum*1024),
-	}
+	theVerticesBackend = &verticesBackend{}
 )
 
+// TODO: The logic is very similar to atlas.temporaryPixels. Unify them.
+
 type verticesBackend struct {
-	backend []float32
-	head    int
+	backend          []float32
+	pos              int
+	notFullyUsedTime int
+
+	m sync.Mutex
 }
 
-func (v *verticesBackend) slice(n int, last bool) []float32 {
-	// As this is called only on browsers, mutex is not required.
-
-	need := n * VertexFloatNum
-	if l := len(v.backend); v.head+need > l {
-		for v.head+need > l {
-			l *= 2
-		}
-		v.backend = make([]float32, l)
-		v.head = 0
+func verticesBackendFloat32Size(size int) int {
+	l := 128 * VertexFloatCount
+	for l < size {
+		l *= 2
 	}
+	return l
+}
 
-	s := v.backend[v.head : v.head+need]
-	if last {
-		// If last is true, the vertices backend is sent to GPU and it is fine to reuse the slice.
-		v.head = 0
-	} else {
-		v.head += need
+func max(a, b int) int {
+	if a > b {
+		return a
 	}
+	return b
+}
+
+func (v *verticesBackend) slice(n int) []float32 {
+	v.m.Lock()
+	defer v.m.Unlock()
+
+	need := n * VertexFloatCount
+	if len(v.backend) < v.pos+need {
+		v.backend = make([]float32, max(len(v.backend)*2, verticesBackendFloat32Size(need)))
+		v.pos = 0
+	}
+	s := v.backend[v.pos : v.pos+need]
+	v.pos += need
 	return s
 }
 
-func vertexSlice(n int, last bool) []float32 {
-	if web.IsBrowser() {
-		// In Wasm, allocating memory by make is expensive. Use the backend instead.
-		return theVerticesBackend.slice(n, last)
+func (v *verticesBackend) lockAndReset(f func() error) error {
+	v.m.Lock()
+	defer v.m.Unlock()
+
+	if err := f(); err != nil {
+		return err
 	}
-	return make([]float32, n*VertexFloatNum)
+
+	const maxNotFullyUsedTime = 60
+	if verticesBackendFloat32Size(v.pos) < len(v.backend) {
+		if v.notFullyUsedTime < maxNotFullyUsedTime {
+			v.notFullyUsedTime++
+		}
+	} else {
+		v.notFullyUsedTime = 0
+	}
+
+	if v.notFullyUsedTime == maxNotFullyUsedTime && len(v.backend) > 0 {
+		v.backend = nil
+		v.notFullyUsedTime = 0
+	}
+
+	v.pos = 0
+	return nil
 }
 
-func QuadVertices(sx0, sy0, sx1, sy1 float32, a, b, c, d, tx, ty float32, cr, cg, cb, ca float32, last bool) []float32 {
+// Vertices returns a float32 slice for n vertices.
+// Vertices returns a slice that never overlaps with other slices returned this function,
+// and users can do optimization based on this fact.
+func Vertices(n int) []float32 {
+	return theVerticesBackend.slice(n)
+}
+
+func LockAndResetVertices(f func() error) error {
+	return theVerticesBackend.lockAndReset(f)
+}
+
+// QuadVertices returns a float32 slice for a quadrangle.
+// QuadVertices returns a slice that never overlaps with other slices returned this function,
+// and users can do optimization based on this fact.
+func QuadVertices(sx0, sy0, sx1, sy1 float32, a, b, c, d, tx, ty float32, cr, cg, cb, ca float32) []float32 {
 	x := sx1 - sx0
 	y := sy1 - sy0
 	ax, by, cx, dy := a*x, b*y, c*x, d*y
 	u0, v0, u1, v1 := float32(sx0), float32(sy0), float32(sx1), float32(sy1)
 
+	// Use the vertex backend instead of calling make to reduce GCs (#1521).
+	vs := theVerticesBackend.slice(4)
+
 	// This function is very performance-sensitive and implement in a very dumb way.
-	vs := vertexSlice(4, last)
-	_ = vs[:32]
+	_ = vs[:4*VertexFloatCount]
 
 	vs[0] = tx
 	vs[1] = ty

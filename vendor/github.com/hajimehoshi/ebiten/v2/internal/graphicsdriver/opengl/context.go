@@ -18,25 +18,26 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2/internal/driver"
-	"github.com/hajimehoshi/ebiten/v2/internal/thread"
+	"github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver"
 )
 
-func convertOperation(op driver.Operation) operation {
+type operation int
+
+func convertOperation(op graphicsdriver.Operation) operation {
 	switch op {
-	case driver.Zero:
+	case graphicsdriver.Zero:
 		return zero
-	case driver.One:
+	case graphicsdriver.One:
 		return one
-	case driver.SrcAlpha:
+	case graphicsdriver.SrcAlpha:
 		return srcAlpha
-	case driver.DstAlpha:
+	case graphicsdriver.DstAlpha:
 		return dstAlpha
-	case driver.OneMinusSrcAlpha:
+	case graphicsdriver.OneMinusSrcAlpha:
 		return oneMinusSrcAlpha
-	case driver.OneMinusDstAlpha:
+	case graphicsdriver.OneMinusDstAlpha:
 		return oneMinusDstAlpha
-	case driver.DstColor:
+	case graphicsdriver.DstColor:
 		return dstColor
 	default:
 		panic(fmt.Sprintf("opengl: invalid operation %d at convertOperation", op))
@@ -48,15 +49,14 @@ type context struct {
 	screenFramebuffer  framebufferNative // This might not be the default frame buffer '0' (e.g. iOS).
 	lastFramebuffer    framebufferNative
 	lastTexture        textureNative
+	lastRenderbuffer   renderbufferNative
 	lastViewportWidth  int
 	lastViewportHeight int
-	lastCompositeMode  driver.CompositeMode
+	lastCompositeMode  graphicsdriver.CompositeMode
 	maxTextureSize     int
 	maxTextureSizeOnce sync.Once
 	highp              bool
 	highpOnce          sync.Once
-
-	t *thread.Thread
 
 	contextImpl
 }
@@ -67,6 +67,14 @@ func (c *context) bindTexture(t textureNative) {
 	}
 	c.bindTextureImpl(t)
 	c.lastTexture = t
+}
+
+func (c *context) bindRenderbuffer(r renderbufferNative) {
+	if c.lastRenderbuffer.equal(r) {
+		return
+	}
+	c.bindRenderbufferImpl(r)
+	c.lastRenderbuffer = r
 }
 
 func (c *context) bindFramebuffer(f framebufferNative) {
@@ -107,14 +115,4 @@ func (c *context) getMaxTextureSize() int {
 		c.maxTextureSize = c.maxTextureSizeImpl()
 	})
 	return c.maxTextureSize
-}
-
-// highpPrecision represents an enough mantissa of float values in a shader.
-const highpPrecision = 23
-
-func (c *context) hasHighPrecisionFloat() bool {
-	c.highpOnce.Do(func() {
-		c.highp = c.getShaderPrecisionFormatPrecision() >= highpPrecision
-	})
-	return c.highp
 }
