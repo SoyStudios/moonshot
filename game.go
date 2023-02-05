@@ -13,17 +13,23 @@ import (
 	"github.com/jakecoffman/cp"
 )
 
+// The shape categories for chipmunk
+// see https://chipmunk-physics.net/release/ChipmunkLatest-Docs/#cpShape-Filtering
 const (
 	SHAPE_CATEGORY_ANY = 1 << iota
 	SHAPE_CATEGORY_BOT
 	SHAPE_CATEGORY_ASTEROID
 )
 
+// The camera has zoom steps, the factor by which each step is
+// multiplied
 const baseZoomFactor = 1.01
 
 type (
 	camera struct {
+		// ViewPort is the size of the viewport width * height
 		ViewPort cp.Vector
+		// Position of the camera in the world
 		Position cp.Vector
 		zoomStep int
 		rotation int
@@ -60,6 +66,7 @@ type (
 
 		ui *UI
 
+		// width and height of the game scene in pixels
 		w, h int
 
 		p *Player
@@ -86,6 +93,7 @@ func (c *camera) viewportCenter() cp.Vector {
 
 // worldObjectMatrix returns a matrix used to place an object
 // onto the world on coordinates x, y
+// relative to the camera
 func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
 	g := ebiten.GeoM{}
 	g.Translate(-c.Position.X, -c.Position.Y)
@@ -412,6 +420,21 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			sx, sy,
 			dx, dy,
 			color.RGBA{255, 0, 0, 255},
+		)
+
+		// draw heading angle
+		// start position matrix
+		ms = g.camera.worldObjectMatrix(0, 0)
+		dir = bot.Velocity()
+		dir = dir.Clamp(1)
+		dir = dir.Mult(32)
+		me = g.camera.worldObjectMatrix(dir.X, dir.Y)
+		sx, sy = ms.Apply(bot.Position().X, bot.Position().Y)
+		dx, dy = me.Apply(bot.Position().X, bot.Position().Y)
+		ebitenutil.DrawLine(g.world,
+			sx, sy,
+			dx, dy,
+			color.RGBA{0, 255, 0, 255},
 		)
 
 		// draw impulses

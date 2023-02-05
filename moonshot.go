@@ -15,7 +15,11 @@ import (
 )
 
 const (
-	windowWidth = 1024
+	// windoWidth is the base to determine the total rendered size of the screen
+	//
+	// The window is then scaled. The height is determined by retrieving the
+	// aspect ration of the screen size.
+	windowWidth = 1280
 )
 
 var ErrExit = errors.New("exit")
@@ -41,8 +45,8 @@ func runMain() int {
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowFloating(true)
 	ebiten.SetWindowResizable(false)
-
 	ebiten.SetFullscreen(true)
+
 	g.cyclesPerTick = 1
 	g.camera = &camera{
 		Position: cp.Vector{X: 0, Y: 0},
@@ -56,6 +60,8 @@ func runMain() int {
 	g.settings.inputMap = defaultInputMap()
 	g.space = cp.NewSpace()
 	g.space.Iterations = 1
+	// see https://chipmunk-physics.net/release/ChipmunkLatest-Docs/#cpSpace-SpatialHash
+	// Experimenting with the spatial index
 	g.space.UseSpatialHash(2.0, 10000)
 	g.ui = NewUI(g)
 

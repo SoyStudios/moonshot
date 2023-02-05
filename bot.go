@@ -170,12 +170,14 @@ func (b *Bot) Execute() {
 	}
 }
 
+const radDeg = 180 / math.Pi
+
 func (b *Bot) DrawInfo(ui *UI, img *ebiten.Image) {
 	text.Draw(img,
 		fmt.Sprintf(`bot (%d)
 
   Position: (%.2f, %.2f)
-  Heading: %d
+  Heading: %.2f rad (%.2f°)
   Velocity: (%.2f, %.2f)
   Speed: %.2f
 
@@ -184,7 +186,7 @@ func (b *Bot) DrawInfo(ui *UI, img *ebiten.Image) {
   Mass/Energy: %.2f / %.2f
 `, b.id,
 			b.Position().X, b.Position().Y,
-			int(b.angle*180/math.Pi)%360,
+			b.Velocity().ToAngle(), math.Mod((b.Velocity().ToAngle()*radDeg+90), 360),
 			b.Velocity().X, b.Velocity().Y,
 			b.Velocity().Length(),
 
