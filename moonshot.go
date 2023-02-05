@@ -46,6 +46,7 @@ func runMain() int {
 	ebiten.SetWindowFloating(true)
 	ebiten.SetWindowResizable(false)
 	ebiten.SetFullscreen(true)
+	ebiten.SetInitFocused(true)
 
 	g.cyclesPerTick = 1
 	g.camera = &camera{

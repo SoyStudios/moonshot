@@ -88,7 +88,7 @@ func NewBot(sp *cp.Space, id int16) *Bot {
 	// create shape
 	b.Shape = cp.NewCircle(b.Body, 8, cp.Vector{})
 	b.Shape.SetElasticity(0)
-	b.Shape.SetFriction(0)
+	b.Shape.SetFriction(botFrictionCoeff)
 	b.Shape.UserData = b
 	b.Shape.Filter.Categories = SHAPE_CATEGORY_BOT
 	sp.AddShape(b.Shape)

@@ -265,11 +265,7 @@ func (g *Game) Update() error {
 			g.botChan <- bot
 		}
 		g.wg.Wait()
-		tps := ebiten.CurrentTPS()
-		if tps == 0 {
-			tps = 60
-		}
-		g.space.Step(1.0 / tps)
+		g.space.Step(1.0 / float64(ebiten.TPS()))
 	}
 	return nil
 }
