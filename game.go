@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"math"
 	"runtime"
-	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -139,128 +138,9 @@ func (c *camera) zoomTo(x, y float64) {
 }
 
 func (g *Game) init() {
+	g.paused = true
 	g.world = ebiten.NewImage(g.w, g.h)
-
-	b := NewBot(g.space, 1)
-	b.SetPosition(cp.Vector{X: 0, Y: 100})
-	b.SetVelocity(100, 0)
-
-	g.bots = []*Bot{b}
-
-	b = NewBot(g.space, 1)
-	b.SetPosition(cp.Vector{X: 600, Y: 100})
-	b.SetVelocity(-10, 0)
-	g.bots = append(g.bots, b)
-
-	code := `
-BEGIN EV
-	// Read bot’s current energy level and push it to the stack
-	RDE
-	PSH CON 1000
-	GEQ
-END
-BEGIN EX
-	PSH CON 500
-	REP
-END
-
-BEGIN EV
-	// If total velocity is >= 200
-	RDX
-	RDY
-	ABS
-	PSH CON 200
-	GEQ
-END
-BEGIN EX
-	PSH CON 0
-	POP REG 0
-	// thrust in opposite direction
-	RDX
-	NEG
-	RDY
-	NEG
-	THR
-END
-
-// Counter for turning
-// Register 0 holds counter
-BEGIN EV
-	// If reg0 <= 80
-	PSH REG 0
-	PSH CON 80
-	LEQ
-END
-BEGIN EX
-	// reg0++
-	PSH REG 0
-	PSH CON 1
-	ADD
-	POP REG 0
-END
-
-// Turning every 80 ticks
-BEGIN EV
-	// if reg0 > 80
-	PSH REG 0
-	PSH CON 80
-	GRT
-END
-BEGIN EX
-	// reset reg0 to 0
-	// turn by 10 degrees
-	PSH CON 0
-	POP REG 0
-	PSH CON 10
-	TRN
-	PSH CON 500
-	IMP
-END
-
-// Create impulse every 20 ticks
-// counter in reg1
-BEGIN EV
-	// if reg1 <= 20
-	PSH REG 1
-	PSH CON 20
-	LEQ
-END
-BEGIN EX
-	// reg1++
-	PSH REG 1
-	PSH CON 1
-	ADD
-	POP REG 1
-END
-
-// Create impulse in current direction
-BEGIN EV
-	// if reg1 > 20
-	PSH REG 1
-	PSH CON 20
-	GRT
-END
-BEGIN EX
-	PSH CON 500
-	IMP
-	PSH CON 0
-	POP REG 1
-END
-	`
-	p := NewParser(strings.NewReader(code))
-	program, err := p.Parse()
-	if err != nil {
-		panic(err)
-	}
-
-	b = NewBot(g.space, 1)
-	b.SetPosition(cp.Vector{X: 200, Y: 200})
-	b.machine.program = program
-	g.bots = append(g.bots, b)
-	g.controls.follow = b
-
-	g.ui.info = b
-	g.ui.code = GeneDrawerFor(0, b.machine.program[0])
+	g.bots = make([]*Bot, 0, 128)
 
 	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {
@@ -398,6 +278,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.world.Fill(color.Black)
 
 	op := &ebiten.DrawImageOptions{}
+	// TODO cache this
 	botSizeX, botSizeY := g.assets.bot.Size()
 	botDX, botDY := float64(botSizeX)/2, float64(botSizeY)/2
 	for _, bot := range g.bots {
@@ -461,10 +342,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
 	ebitenutil.DebugPrintAt(
 		screen,
-		fmt.Sprintf("TPS: %0.2f, C: %d\n%s\nCursor World Pos: %.2f,%.2f",
+		fmt.Sprintf("TPS: %0.2f, C: %d\n%s\nCursor World Pos: %.2f,%.2f\n%s",
 			ebiten.CurrentTPS(), g.cyclesPerTick,
 			g.camera.String(),
 			worldX, worldY,
+			func() string {
+				if g.paused {
+					return "*PAUSED*"
+				}
+				return ""
+			}(),
 		),
 		0, g.h-72,
 	)

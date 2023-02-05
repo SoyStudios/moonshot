@@ -77,6 +77,16 @@ func runMain() int {
 
 	g.init()
 
+	var scenario string
+	if len(os.Args) == 2 {
+		scenario = os.Args[1]
+	}
+	if scen, ok := scenarios[scenario]; !ok {
+		scenarios["all"].LoadScenario(g)
+	} else {
+		scen.LoadScenario(g)
+	}
+
 	if err := ebiten.RunGame(g); err != nil {
 		if err == ErrExit {
 			return 0
