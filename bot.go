@@ -11,6 +11,8 @@ import (
 	"github.com/jakecoffman/cp"
 )
 
+const botFrictionCoeff = 0.4
+
 type (
 	Bot struct {
 		*cp.Body
