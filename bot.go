@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/jakecoffman/cp"
 )
@@ -44,14 +45,14 @@ type (
 	}
 )
 
-func BotRunner(bc <-chan *Bot, done chan struct{}) {
+func BotRunner(g *Game, bc <-chan *Bot) {
 	for {
 		b, ok := <-bc
 		if !ok {
 			break
 		}
 		b.machine.Run()
-		done <- struct{}{}
+		g.wg.Done()
 	}
 }
 
@@ -241,4 +242,68 @@ func (b *Bot) DrawInfo(ui *UI, img *ebiten.Image) {
 		}
 		col++
 	}
+}
+
+var (
+	botSizeX, botSizeY int
+	botDX, botDY       float64
+)
+
+func initBotDraw(g *Game) {
+	botSizeX, botSizeY = g.assets.bot.Size()
+	botDX, botDY = float64(botSizeX)/2, float64(botSizeY)/2
+}
+
+func (b *Bot) Draw(g *Game) {
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM = g.camera.worldObjectMatrix(
+		b.Position().X-botDX,
+		b.Position().Y-botDY,
+	)
+	g.world.DrawImage(g.assets.bot, op)
+
+	// draw viewing angle
+	// start position matrix
+	ms := g.camera.worldObjectMatrix(0, 0)
+	dir := cp.ForAngle(b.angle)
+	dir = dir.Clamp(1)
+	dir = dir.Mult(32)
+	me := g.camera.worldObjectMatrix(dir.X, dir.Y)
+	sx, sy := ms.Apply(b.Position().X, b.Position().Y)
+	dx, dy := me.Apply(b.Position().X, b.Position().Y)
+	ebitenutil.DrawLine(g.world,
+		sx, sy,
+		dx, dy,
+		color.RGBA{255, 0, 0, 255},
+	)
+
+	// draw heading angle
+	// start position matrix
+	ms = g.camera.worldObjectMatrix(0, 0)
+	dir = b.Velocity()
+	dir = dir.Clamp(1)
+	dir = dir.Mult(32)
+	me = g.camera.worldObjectMatrix(dir.X, dir.Y)
+	sx, sy = ms.Apply(b.Position().X, b.Position().Y)
+	dx, dy = me.Apply(b.Position().X, b.Position().Y)
+	ebitenutil.DrawLine(g.world,
+		sx, sy,
+		dx, dy,
+		color.RGBA{0, 255, 0, 255},
+	)
+
+	// draw impulses
+	for _, imp := range b.impulses {
+		ms = g.camera.worldObjectMatrix(b.CenterOfGravity().X, b.CenterOfGravity().Y)
+		sx, sy = ms.Apply(b.Position().X, b.Position().Y)
+		me = g.camera.worldObjectMatrix(imp.X, imp.Y)
+		dx, dy = me.Apply(b.Position().X, b.Position().Y)
+		ebitenutil.DrawLine(g.world,
+			sx, sy,
+			dx, dy,
+			color.RGBA{0, 255, 0, 255},
+		)
+	}
+
+	b.FrameReset()
 }

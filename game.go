@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"runtime"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -60,8 +61,8 @@ type (
 		bots []*Bot
 
 		numRunners int
+		wg         sync.WaitGroup
 		botChan    chan *Bot
-		doneChan   chan struct{}
 
 		ui *UI
 
@@ -138,6 +139,8 @@ func (c *camera) zoomTo(x, y float64) {
 }
 
 func (g *Game) init() {
+	initBotDraw(g)
+
 	g.paused = true
 	g.world = ebiten.NewImage(g.w, g.h)
 	g.bots = make([]*Bot, 0, 128)
@@ -146,7 +149,10 @@ func (g *Game) init() {
 	if g.numRunners < 2 {
 		g.numRunners = 2
 	}
-	g.doneChan = make(chan struct{}, 1)
+	g.botChan = make(chan *Bot, 1)
+	for i := 0; i < g.numRunners; i++ {
+		go BotRunner(g, g.botChan)
+	}
 }
 
 func repeatingKeyPressed(key ebiten.Key) bool {
@@ -254,17 +260,11 @@ func (g *Game) Update() error {
 
 	// Run bot cycles
 	for i := 0; i < g.cyclesPerTick; i++ {
-		g.botChan = make(chan *Bot, 1)
-		for i := 0; i < g.numRunners; i++ {
-			go BotRunner(g.botChan, g.doneChan)
-		}
+		g.wg.Add(len(g.bots))
 		for _, bot := range g.bots {
 			g.botChan <- bot
 		}
-		close(g.botChan)
-		for i := 0; i < len(g.bots); i++ {
-			<-g.doneChan
-		}
+		g.wg.Wait()
 		tps := ebiten.CurrentTPS()
 		if tps == 0 {
 			tps = 60
@@ -277,61 +277,8 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.world.Fill(color.Black)
 
-	op := &ebiten.DrawImageOptions{}
-	// TODO cache this
-	botSizeX, botSizeY := g.assets.bot.Size()
-	botDX, botDY := float64(botSizeX)/2, float64(botSizeY)/2
 	for _, bot := range g.bots {
-		op.GeoM = g.camera.worldObjectMatrix(
-			bot.Position().X-botDX,
-			bot.Position().Y-botDY,
-		)
-		g.world.DrawImage(g.assets.bot, op)
-
-		// draw viewing angle
-		// start position matrix
-		ms := g.camera.worldObjectMatrix(0, 0)
-		dir := cp.ForAngle(bot.angle)
-		dir = dir.Clamp(1)
-		dir = dir.Mult(32)
-		me := g.camera.worldObjectMatrix(dir.X, dir.Y)
-		sx, sy := ms.Apply(bot.Position().X, bot.Position().Y)
-		dx, dy := me.Apply(bot.Position().X, bot.Position().Y)
-		ebitenutil.DrawLine(g.world,
-			sx, sy,
-			dx, dy,
-			color.RGBA{255, 0, 0, 255},
-		)
-
-		// draw heading angle
-		// start position matrix
-		ms = g.camera.worldObjectMatrix(0, 0)
-		dir = bot.Velocity()
-		dir = dir.Clamp(1)
-		dir = dir.Mult(32)
-		me = g.camera.worldObjectMatrix(dir.X, dir.Y)
-		sx, sy = ms.Apply(bot.Position().X, bot.Position().Y)
-		dx, dy = me.Apply(bot.Position().X, bot.Position().Y)
-		ebitenutil.DrawLine(g.world,
-			sx, sy,
-			dx, dy,
-			color.RGBA{0, 255, 0, 255},
-		)
-
-		// draw impulses
-		for _, imp := range bot.impulses {
-			ms = g.camera.worldObjectMatrix(bot.CenterOfGravity().X, bot.CenterOfGravity().Y)
-			sx, sy = ms.Apply(bot.Position().X, bot.Position().Y)
-			me = g.camera.worldObjectMatrix(imp.X, imp.Y)
-			dx, dy = me.Apply(bot.Position().X, bot.Position().Y)
-			ebitenutil.DrawLine(g.world,
-				sx, sy,
-				dx, dy,
-				color.RGBA{0, 255, 0, 255},
-			)
-		}
-
-		bot.FrameReset()
+		bot.Draw(g)
 	}
 
 	g.camera.Render(g.world, screen)
