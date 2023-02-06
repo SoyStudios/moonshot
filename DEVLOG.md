@@ -22,6 +22,16 @@ This is where I left off the last time. Problems I need to address:
 
 ### Procedurally generating asteroids
 
+Next attempt:
+
+https://cglab.ca/~sander/misc/ConvexGeneration/convex.html
+
+Much simpler idea (sometimes the simplest ideas don't come to us):
+
+Pretty much: draw a circle with random steps and random radii.
+
+Too "spikey".
+
 Current idea:
 
 Start with a line with random (clamped) length and angle.
