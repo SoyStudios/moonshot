@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -17,22 +18,25 @@ const (
 )
 
 var (
-	asteroidSrc *ebiten.Image
+	asteroidBase *ebiten.Image
+	asteroidSrc  *ebiten.Image
 )
 
 func init() {
-	asteroidSrc = ebiten.NewImage(1, 1)
-	asteroidSrc.Fill(color.RGBA64{128, 128, 128, 255})
+	asteroidBase = ebiten.NewImage(3, 3)
+	asteroidBase.Fill(color.White)
+	asteroidSrc = asteroidBase.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
 }
 
 type (
 	Asteroid struct {
 		Bounds image.Rectangle
 
-		Body  *cp.Body
-		Shape *cp.PolyShape
+		*cp.Body
+		*cp.Shape
 
 		Path *vector.Path
+		Img  *ebiten.Image
 	}
 )
 
@@ -40,6 +44,7 @@ func NewAsteroid(bounds image.Rectangle) *Asteroid {
 	a := &Asteroid{
 		Bounds: bounds,
 	}
+	a.Img = ebiten.NewImageWithOptions(a.Bounds, nil)
 	a.Body = cp.NewBody(0, 0)
 	return a
 }
@@ -62,15 +67,19 @@ func (a *Asteroid) generate(seed int64) {
 	a.Path.MoveTo(float32(start.X), float32(start.Y))
 
 	// length
-	l := rnd.Float64() * float64(a.Bounds.Dx()) * 0.3
+	l := rnd.Float64() * float64(a.Bounds.Dx()) * 0.1
 	// angle to next vertex
 	rad := rnd.Float64() * 0.5
 	// add pi / 2, so we start at north
 	rad += math.Pi / 2
 	dispV := cp.ForAngle(rad)
-	dispV.Mult(l)
-	end := start.Add(dispV)
+	end := start.Add(dispV.Mult(l))
 	a.Path.LineTo(float32(end.X), float32(end.Y))
+	infoLog.Log("msg", "line",
+		"length", fmt.Sprintf("%.0f", l),
+		"start", fmt.Sprintf("%.0f, %.0f", start.X, start.Y),
+		"end", fmt.Sprintf("%.0f, %.0f", end.X, end.Y),
+	)
 
 	sumRad := rad
 	for (math.Pi*2)-sumRad > 0.2 {
@@ -79,9 +88,36 @@ func (a *Asteroid) generate(seed int64) {
 		// length
 		l = rnd.Float64() * float64(a.Bounds.Dx()) * 0.3
 		dispV = cp.ForAngle(sumRad)
-		dispV.Mult(l)
-		end = newStart.Add(dispV)
+		end = newStart.Add(dispV.Mult(l))
 		a.Path.LineTo(float32(end.X), float32(end.Y))
+		infoLog.Log("msg", "line",
+			"start", fmt.Sprintf("%.0f, %.0f", newStart.X, newStart.Y),
+			"end", fmt.Sprintf("%.0f, %.0f", end.X, end.Y),
+		)
 	}
 	a.Path.LineTo(float32(start.X), float32(start.Y))
+
+	op := &ebiten.DrawTrianglesOptions{}
+	op.FillRule = ebiten.EvenOdd
+
+	a.Img.Clear()
+	verts, indexes := a.Path.AppendVerticesAndIndicesForFilling(nil, nil)
+	for i := range verts {
+		verts[i].SrcX = 1
+		verts[i].SrcY = 1
+		verts[i].ColorR = 0xf0 / float32(0xff)
+		verts[i].ColorG = 0xf0 / float32(0xff)
+		verts[i].ColorB = 0xf0 / float32(0xff)
+	}
+	a.Img.DrawTriangles(verts, indexes, asteroidSrc, op)
+}
+
+func (a *Asteroid) Draw(g *Game) {
+	op := &ebiten.DrawImageOptions{}
+	dx, dy := float64(a.Bounds.Dx())/2, float64(a.Bounds.Dy())/2
+	op.GeoM = g.camera.worldObjectMatrix(
+		a.Position().X-dx,
+		a.Position().Y-dy,
+	)
+	g.world.DrawImage(a.Img, op)
 }

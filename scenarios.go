@@ -1,7 +1,9 @@
 package main
 
 import (
+	"image"
 	"strings"
+	"time"
 
 	"github.com/jakecoffman/cp"
 )
@@ -142,6 +144,8 @@ END
 	},
 
 	"asteroid": func(g *Game) {
-
+		a := NewAsteroid(image.Rect(0, 0, 1000, 1000))
+		a.generate(time.Now().Unix())
+		g.asteroids = append(g.asteroids, a)
 	},
 }

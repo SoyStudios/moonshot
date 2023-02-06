@@ -28,9 +28,17 @@ func main() {
 	os.Exit(runMain())
 }
 
+var errLog, infoLog log.Logger
+
 func runMain() int {
-	errLog := log.NewSyncLogger(log.NewLogfmtLogger(os.Stderr))
+	errLog = log.NewSyncLogger(log.NewLogfmtLogger(os.Stderr))
 	errLog = log.WithPrefix(errLog,
+		"t", log.DefaultTimestampUTC,
+		"level", "error",
+		"caller", log.DefaultCaller,
+	)
+	infoLog = log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))
+	infoLog = log.WithPrefix(infoLog,
 		"t", log.DefaultTimestampUTC,
 		"level", "error",
 		"caller", log.DefaultCaller,
