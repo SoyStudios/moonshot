@@ -138,14 +138,20 @@ END
 		b.SetPosition(cp.Vector{X: 200, Y: 200})
 		b.machine.program = program
 		g.bots = append(g.bots, b)
-		g.controls.follow = b
 
 		g.ui.info = b
 	},
 
 	"asteroid": func(g *Game) {
-		a := NewAsteroid(image.Rect(0, 0, 1000, 1000))
+		a := NewAsteroid(g.space, image.Rect(0, 0, 500, 500))
 		a.generate(time.Now().Unix())
+		a.SetVelocity(80, 80)
 		g.asteroids = append(g.asteroids, a)
+
+		a2 := NewAsteroid(g.space, image.Rect(0, 0, 600, 600))
+		a2.SetPosition(cp.Vector{2000, 2000})
+		a2.generate(time.Now().Unix())
+		a2.SetVelocity(-150, -150)
+		g.asteroids = append(g.asteroids, a2)
 	},
 }

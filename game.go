@@ -29,7 +29,7 @@ type (
 		}
 
 		paused bool
-		step   int
+		doStep bool
 
 		assets *assets
 
@@ -40,6 +40,7 @@ type (
 		}
 
 		cyclesPerTick int
+		step          int64
 
 		space *cp.Space
 		world *ebiten.Image
@@ -53,6 +54,8 @@ type (
 		asteroids []*Asteroid
 
 		ui *UI
+
+		physicsDebug *PhyicsDebug
 
 		// width and height of the game scene in pixels
 		w, h int
@@ -81,6 +84,8 @@ func (g *Game) init() {
 	for i := 0; i < g.numRunners; i++ {
 		go BotRunner(g, g.botChan)
 	}
+
+	g.physicsDebug = &PhyicsDebug{g: g}
 }
 
 func repeatingKeyPressed(key ebiten.Key) bool {
@@ -124,8 +129,6 @@ func (g *Game) Update() error {
 		return ErrExit
 	}
 
-	g.ui.Update()
-
 	// Camera controls
 	g.updateOnKey("zoomOut", func() {
 		g.resetFollow()
@@ -160,13 +163,21 @@ func (g *Game) Update() error {
 	})
 	g.updateOnRepeatingKey("step", func() {
 		if g.paused {
-			g.step++
+			g.doStep = true
 		}
 	})
-	if g.paused && g.step == 0 {
+
+	// debug
+	g.updateOnRepeatingKey("physicsDebug", func() {
+		g.physicsDebug.enabled = !g.physicsDebug.enabled
+	})
+
+	g.ui.Update()
+
+	if g.paused && !g.doStep {
 		return nil
 	}
-	g.step = 0
+	g.doStep = false
 
 	// follow
 	if g.controls.follow != nil {
@@ -194,6 +205,7 @@ func (g *Game) Update() error {
 		}
 		g.wg.Wait()
 		g.space.Step(1.0 / float64(ebiten.TPS()))
+		g.step++
 	}
 	return nil
 }
@@ -211,24 +223,39 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.camera.Render(g.world, screen)
 
+	if g.physicsDebug.enabled {
+		g.physicsDebug.initialize()
+		cp.DrawSpace(g.space, g.physicsDebug)
+		g.physicsDebug.Draw(screen)
+	}
+
 	g.ui.Draw(screen)
 
 	// debug info
-	worldX, worldY := g.camera.ScreenToWorld(ebiten.CursorPosition())
+	cursorX, cursorY := ebiten.CursorPosition()
+	worldX, worldY := g.camera.ScreenToWorld(cursorX, cursorY)
 	ebitenutil.DebugPrintAt(
 		screen,
-		fmt.Sprintf("TPS: %0.2f, C: %d\n%s\nCursor World Pos: %.2f,%.2f\n%s",
+		fmt.Sprintf("TPS: %0.2f, C: %d\n%s\nCursor: %d,%d World Pos: %.2f,%.2f\nStep: %d\n%s %s",
 			ebiten.CurrentTPS(), g.cyclesPerTick,
 			g.camera.String(),
+			cursorX, cursorY,
 			worldX, worldY,
+			g.step,
 			func() string {
 				if g.paused {
 					return "*PAUSED*"
 				}
 				return ""
 			}(),
+			func() string {
+				if g.physicsDebug.enabled {
+					return "*DEBUG*"
+				}
+				return ""
+			}(),
 		),
-		0, g.h-72,
+		0, g.h-128,
 	)
 }
 

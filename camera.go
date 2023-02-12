@@ -25,8 +25,11 @@ type (
 
 func (c *camera) String() string {
 	return fmt.Sprintf(
-		"T: %.1f, VP: %.1f, R: %d, S: %d, Z: %.1f",
-		c.Position, c.ViewPort, c.rotation, c.zoomStep, c.zoomFactor(),
+		"P: %.1f,%.1f, VP: %.1f,%.1f, R: %d, S: %d, Z: %.1f",
+		c.Position.X, c.Position.Y,
+		c.ViewPort.X, c.ViewPort.Y,
+		c.rotation,
+		c.zoomStep, c.zoomFactor(),
 	)
 }
 
@@ -42,8 +45,12 @@ func (c *camera) viewportCenter() cp.Vector {
 // relative to the camera
 func (c *camera) worldObjectMatrix(x, y float64) ebiten.GeoM {
 	g := ebiten.GeoM{}
-	g.Translate(-c.Position.X, -c.Position.Y)
 	g.Translate(x, y)
+	return c.getTransform(g)
+}
+
+func (c *camera) getTransform(g ebiten.GeoM) ebiten.GeoM {
+	g.Translate(-c.Position.X, -c.Position.Y)
 	g.Translate(-c.viewportCenter().X, -c.viewportCenter().Y)
 	g.Scale(c.zoomFactor(), c.zoomFactor())
 	g.Translate(c.viewportCenter().X, c.viewportCenter().Y)

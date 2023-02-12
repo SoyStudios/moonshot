@@ -40,7 +40,7 @@ func runMain() int {
 	infoLog = log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))
 	infoLog = log.WithPrefix(infoLog,
 		"t", log.DefaultTimestampUTC,
-		"level", "error",
+		"level", "info",
 		"caller", log.DefaultCaller,
 	)
 	// window

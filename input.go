@@ -17,5 +17,7 @@ func defaultInputMap() map[string][]ebiten.Key {
 
 		"speedUp":   {ebiten.KeyEqual},
 		"speedDown": {ebiten.KeyMinus},
+
+		"physicsDebug": {ebiten.KeyBackquote},
 	}
 }
