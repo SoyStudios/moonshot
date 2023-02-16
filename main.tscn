@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3 uid="uid://6lv64v4id6al"]
+
+[ext_resource type="Script" path="res://main.gd" id="1_duedy"]
+[ext_resource type="PackedScene" uid="uid://ds67nstpbymf1" path="res://bot.tscn" id="2_4f05f"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1_duedy")
+bot_scene = ExtResource("2_4f05f")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+current = true
