@@ -2,12 +2,9 @@ package main
 
 import (
 	"image"
-	"image/color"
 	"math/rand"
 	"sort"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/jakecoffman/cp"
 )
 
@@ -15,17 +12,6 @@ const (
 	asteroidFrictionCoeff = 0.6
 	asteroidBoundsPadding = 2.0
 )
-
-var (
-	asteroidBase *ebiten.Image
-	asteroidSrc  *ebiten.Image
-)
-
-func init() {
-	asteroidBase = ebiten.NewImage(3, 3)
-	asteroidBase.Fill(color.White)
-	asteroidSrc = asteroidBase.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
-}
 
 type (
 	Asteroid struct {
@@ -35,9 +21,6 @@ type (
 		*cp.Shape
 
 		space *cp.Space
-
-		Path *vector.Path
-		Img  *ebiten.Image
 	}
 
 	vects []cp.Vector
@@ -52,7 +35,6 @@ func NewAsteroid(sp *cp.Space, bounds image.Rectangle) *Asteroid {
 		space:  sp,
 		Bounds: bounds,
 	}
-	a.Img = ebiten.NewImageWithOptions(a.Bounds, nil)
 	a.Body = cp.NewBody(0, 0)
 	return a
 }
@@ -145,42 +127,33 @@ func (a *Asteroid) generate(seed int64) {
 	a.space.AddBody(a.Body)
 	a.space.AddShape(a.Shape)
 
-	a.Path = &vector.Path{}
-	vect = vs[0]
-	pt := transform.Point(vect)
-	start := pt
-	a.Path.MoveTo(float32(pt.X), float32(pt.Y))
-
-	for i := 1; i < len(vs); i++ {
-		vect = vect.Add(vs[i])
-		pt = transform.Point(vect)
-		a.Path.LineTo(float32(pt.X), float32(pt.Y))
-	}
-	a.Path.LineTo(float32(start.X), float32(start.Y))
-
-	op := &ebiten.DrawTrianglesOptions{}
-	op.FillRule = ebiten.EvenOdd
-
-	a.Img.Clear()
-	verts, indexes := a.Path.AppendVerticesAndIndicesForFilling(nil, nil)
-	for i := range verts {
-		verts[i].SrcX = 1
-		verts[i].SrcY = 1
-		verts[i].ColorR = 0xf0 / float32(0xff)
-		verts[i].ColorG = 0xf0 / float32(0xff)
-		verts[i].ColorB = 0xf0 / float32(0xff)
-	}
-	a.Img.DrawTriangles(verts, indexes, asteroidSrc, op)
+	// a.Path = &vector.Path{}
+	// vect = vs[0]
+	// pt := transform.Point(vect)
+	// start := pt
+	// a.Path.MoveTo(float32(pt.X), float32(pt.Y))
+	//
+	//	for i := 1; i < len(vs); i++ {
+	//		vect = vect.Add(vs[i])
+	//		pt = transform.Point(vect)
+	//		a.Path.LineTo(float32(pt.X), float32(pt.Y))
+	//	}
+	//
+	// a.Path.LineTo(float32(start.X), float32(start.Y))
+	//
+	// op := &ebiten.DrawTrianglesOptions{}
+	// op.FillRule = ebiten.EvenOdd
+	//
+	// verts, _ := a.Path.AppendVerticesAndIndicesForFilling(nil, nil)
+	//
+	//	for i := range verts {
+	//		verts[i].SrcX = 1
+	//		verts[i].SrcY = 1
+	//		verts[i].ColorR = 0xf0 / float32(0xff)
+	//		verts[i].ColorG = 0xf0 / float32(0xff)
+	//		verts[i].ColorB = 0xf0 / float32(0xff)
+	//	}
 }
 
 func (a *Asteroid) Draw(g *Game) {
-	op := &ebiten.DrawImageOptions{}
-	// rotate around that point
-	op.GeoM.Rotate(a.Angle())
-	// move to the center of graviry
-	op.GeoM.Translate(-1*a.Body.CenterOfGravity().X, -1*a.Body.CenterOfGravity().Y)
-	op.GeoM.Translate(a.Position().X, a.Position().Y)
-	op.GeoM = g.camera.getTransform(op.GeoM)
-
-	g.world.DrawImage(a.Img, op)
 }

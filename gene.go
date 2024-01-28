@@ -1,12 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"image/color"
 	"strings"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 )
 
 type (
@@ -21,30 +16,12 @@ type (
 		Evaluate AST
 		Execute  AST
 	}
-
-	GeneDrawer func(*UI, *ebiten.Image)
 )
 
 func NewGene() *Gene {
 	return &Gene{
 		Evaluate: make([]Instruction, 0),
 		Execute:  make([]Instruction, 0),
-	}
-}
-
-func (d GeneDrawer) DrawCode(ui *UI, img *ebiten.Image) {
-	d(ui, img)
-}
-
-func GeneDrawerFor(i int, g *Gene) GeneDrawer {
-	return func(ui *UI, img *ebiten.Image) {
-		text.Draw(img,
-			fmt.Sprintf(`Gene (%d)
-`, i,
-			),
-			ui.game.assets.font,
-			24, 80,
-			color.White)
 	}
 }
 

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2022 The Ebitengine Authors
 
-//go:build darwin
-// +build darwin
+//go:build darwin || linux || freebsd
 
 /*
 trampoline for emulating required C functions for cgo in go (see cgo.go)
@@ -29,125 +28,77 @@ return value will be in AX
 
 // these trampolines map the gcc ABI to Go ABI and then calls into the Go equivalent functions.
 
-// TODO: put <> to make these private
 TEXT x_cgo_init_trampoline(SB), NOSPLIT, $16
-	MOVQ DI, 0(SP)
-	MOVQ SI, 8(SP)
-	CALL ·x_cgo_init(SB)
+	MOVQ DI, AX
+	MOVQ SI, BX
+	MOVQ ·x_cgo_init_call(SB), DX
+	MOVQ (DX), CX
+	CALL CX
 	RET
 
 TEXT x_cgo_thread_start_trampoline(SB), NOSPLIT, $8
-	MOVQ DI, 0(SP)
-	CALL ·x_cgo_thread_start(SB)
+	MOVQ DI, AX
+	MOVQ ·x_cgo_thread_start_call(SB), DX
+	MOVQ (DX), CX
+	CALL CX
 	RET
 
 TEXT x_cgo_setenv_trampoline(SB), NOSPLIT, $8
-	MOVQ DI, 0(SP)
-	CALL ·x_cgo_setenv(SB)
+	MOVQ DI, AX
+	MOVQ ·x_cgo_setenv_call(SB), DX
+	MOVQ (DX), CX
+	CALL CX
 	RET
 
 TEXT x_cgo_unsetenv_trampoline(SB), NOSPLIT, $8
-	MOVQ DI, 0(SP)
-	CALL ·x_cgo_unsetenv(SB)
+	MOVQ DI, AX
+	MOVQ ·x_cgo_unsetenv_call(SB), DX
+	MOVQ (DX), CX
+	CALL CX
 	RET
 
 TEXT x_cgo_notify_runtime_init_done_trampoline(SB), NOSPLIT, $0
 	CALL ·x_cgo_notify_runtime_init_done(SB)
 	RET
 
+TEXT x_cgo_bindm_trampoline(SB), NOSPLIT, $0
+	CALL ·x_cgo_bindm(SB)
+	RET
+
 // func setg_trampoline(setg uintptr, g uintptr)
 TEXT ·setg_trampoline(SB), NOSPLIT, $0-16
 	MOVQ G+8(FP), DI
-	MOVQ setg+0(FP), AX
-	CALL AX
+	MOVQ setg+0(FP), BX
+	XORL AX, AX
+	CALL BX
 	RET
 
 TEXT threadentry_trampoline(SB), NOSPLIT, $16
-	MOVQ DI, 0(SP)
-	CALL ·threadentry(SB)
-	MOVQ 8(SP), AX
+	MOVQ DI, AX
+	MOVQ ·threadentry_call(SB), DX
+	MOVQ (DX), CX
+	CALL CX
 	RET
 
-TEXT ·setenv(SB), NOSPLIT, $0-0
-	MOVQ name+0(FP), DI
-	MOVQ value+8(FP), SI
-	MOVL overwrite+16(FP), DX
-	CALL libc_setenv(SB)
-	MOVL AX, ret+24(FP)
-	RET
+TEXT ·call5(SB), NOSPLIT, $0-56
+	MOVQ fn+0(FP), BX
+	MOVQ a1+8(FP), DI
+	MOVQ a2+16(FP), SI
+	MOVQ a3+24(FP), DX
+	MOVQ a4+32(FP), CX
+	MOVQ a5+40(FP), R8
 
-TEXT ·unsetenv(SB), NOSPLIT, $0-0
-	MOVQ name+0(FP), DI
-	CALL libc_unsetenv(SB)
-	MOVL AX, ret+8(FP)
-	RET
+	XORL AX, AX // no floats
 
-TEXT ·malloc(SB), NOSPLIT, $0-0
-	MOVQ size+0(FP), DI
-	CALL libc_malloc(SB)
-	MOVQ AX, ret+8(FP)
-	RET
+	PUSHQ BP       // save BP
+	MOVQ  SP, BP   // save SP inside BP bc BP is callee-saved
+	SUBQ  $16, SP  // allocate space for alignment
+	ANDQ  $-16, SP // align on 16 bytes for SSE
 
-TEXT ·free(SB), NOSPLIT, $0-0
-	MOVQ ptr+0(FP), DI
-	CALL libc_free(SB)
-	RET
+	CALL BX
 
-TEXT ·pthread_attr_init(SB), NOSPLIT, $0-12
-	MOVQ attr+0(FP), DI
-	CALL libc_pthread_attr_init(SB)
-	MOVL AX, ret+8(FP)
-	RET
+	MOVQ BP, SP // get SP back
+	POPQ BP     // restore BP
 
-TEXT ·pthread_detach(SB), NOSPLIT, $0-12
-	MOVQ thread+0(FP), DI
-	CALL libc_pthread_detach(SB)
-	MOVL AX, ret+8(FP)
-	RET
-
-TEXT ·pthread_create(SB), NOSPLIT, $0-36
-	MOVQ thread+0(FP), DI
-	MOVQ attr+8(FP), SI
-	MOVQ start+16(FP), DX
-	MOVQ arg+24(FP), CX
-	CALL libc_pthread_create(SB)
-	MOVL AX, ret+32(FP)
-	RET
-
-TEXT ·pthread_attr_destroy(SB), NOSPLIT, $0-0
-	MOVQ attr+0(FP), DI
-	CALL libc_pthread_attr_destroy(SB)
-	MOVL AX, ret+8(FP)
-	RET
-
-TEXT ·pthread_attr_getstacksize(SB), NOSPLIT, $0-0
-	MOVQ attr+0(FP), DI
-	MOVQ stacksize+8(FP), SI
-	CALL libc_pthread_attr_getstacksize(SB)
-	MOVL AX, ret+16(FP)
-	RET
-
-TEXT ·pthread_sigmask(SB), NOSPLIT, $0-0
-	MOVL how+0(FP), DI
-	MOVQ ign+8(FP), SI
-	MOVQ oset+16(FP), DX
-	CALL libc_pthread_sigmask(SB)
-	MOVL AX, ret+24(FP)
-	RET
-
-TEXT ·abort(SB), NOSPLIT, $0-0
-	CALL libc_abort(SB)
-	RET
-
-TEXT ·sigfillset(SB), NOSPLIT, $0-12
-	MOVQ set+0(FP), DI
-	CALL libc_sigfillset(SB)
-	MOVL AX, ret+8(FP)
-	RET
-
-TEXT ·nanosleep(SB), NOSPLIT, $0-20
-	MOVQ ts+0(FP), DI
-	MOVQ rem+8(FP), SI
-	CALL libc_nanosleep(SB)
-	MOVL AX, ret+16(FP)
+	MOVQ AX, ret+48(FP)
 	RET

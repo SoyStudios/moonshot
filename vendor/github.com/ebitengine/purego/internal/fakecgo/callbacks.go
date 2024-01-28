@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build darwin
-// +build darwin
+//go:build darwin || freebsd || linux
 
 package fakecgo
 
-import _ "unsafe"
+import (
+	_ "unsafe"
+)
 
 // TODO: decide if we need _runtime_cgo_panic_internal
 
@@ -40,5 +41,53 @@ var _cgo_thread_start = &x_cgo_thread_start_trampoline
 var x_cgo_notify_runtime_init_done_trampoline byte
 var _cgo_notify_runtime_init_done = &x_cgo_notify_runtime_init_done_trampoline
 
+// Indicates whether a dummy thread key has been created or not.
+//
+// When calling go exported function from C, we register a destructor
+// callback, for a dummy thread key, by using pthread_key_create.
+
+//go:linkname _cgo_pthread_key_created _cgo_pthread_key_created
+var x_cgo_pthread_key_created uintptr
+var _cgo_pthread_key_created = &x_cgo_pthread_key_created
+
+// Set the x_crosscall2_ptr C function pointer variable point to crosscall2.
+// It's for the runtime package to call at init time.
+func set_crosscall2() {
+	// nothing needs to be done here for fakecgo
+	// because it's possible to just call cgocallback directly
+}
+
+//go:linkname _set_crosscall2 runtime.set_crosscall2
+var _set_crosscall2 = set_crosscall2
+
+// Store the g into the thread-specific value.
+// So that pthread_key_destructor will dropm when the thread is exiting.
+
+//go:linkname x_cgo_bindm_trampoline x_cgo_bindm_trampoline
+//go:linkname _cgo_bindm _cgo_bindm
+var x_cgo_bindm_trampoline byte
+var _cgo_bindm = &x_cgo_bindm_trampoline
+
 // TODO: decide if we need x_cgo_set_context_function
 // TODO: decide if we need _cgo_yield
+
+var (
+	// In Go 1.20 the race detector was rewritten to pure Go
+	// on darwin. This means that when CGO_ENABLED=0 is set
+	// fakecgo is built with race detector code. This is not
+	// good since this code is pretending to be C. The go:norace
+	// pragma is not enough, since it only applies to the native
+	// ABIInternal function. The ABIO wrapper (which is necessary,
+	// since all references to text symbols from assembly will use it)
+	// does not inherit the go:norace pragma, so it will still be
+	// instrumented by the race detector.
+	//
+	// To circumvent this issue, using closure calls in the
+	// assembly, which forces the compiler to use the ABIInternal
+	// native implementation (which has go:norace) instead.
+	threadentry_call        = threadentry
+	x_cgo_init_call         = x_cgo_init
+	x_cgo_setenv_call       = x_cgo_setenv
+	x_cgo_unsetenv_call     = x_cgo_unsetenv
+	x_cgo_thread_start_call = x_cgo_thread_start
+)

@@ -1,22 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2022 The Ebitengine Authors
 
-//go:build darwin
-// +build darwin
+//go:build darwin || freebsd || linux
 
 package fakecgo
 
-type size_t uintptr
-
-type sigset_t [128]byte      // TODO: figure out how big this should be
-type pthread_attr_t [56]byte // TODO: figure out how big this should be
-type pthread_t int
-
-// We could take timespec from syscall - but there it uses int32 and int64 for 32 bit and 64 bit arch, which complicates stuff for us
-type timespec struct {
-	tv_sec  int
-	tv_nsec int
-}
+type (
+	size_t         uintptr
+	sigset_t       [128]byte
+	pthread_attr_t [64]byte
+	pthread_t      int
+	pthread_key_t  uint64
+)
 
 // for pthread_sigmask:
 
