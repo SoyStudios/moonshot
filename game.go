@@ -4,7 +4,9 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/jakecoffman/cp"
+	rl "github.com/gen2brain/raylib-go/raylib"
+
+	"github.com/gen2brain/raylib-go/physics"
 )
 
 // The shape categories for chipmunk
@@ -23,8 +25,6 @@ type (
 		cyclesPerTick int
 		step          int64
 
-		space *cp.Space
-
 		bots []*Bot
 
 		numRunners int
@@ -36,7 +36,7 @@ type (
 		// width and height of the game scene in pixels
 		w, h int
 
-		p *Player
+		camera rl.Camera2D
 	}
 )
 
@@ -45,10 +45,15 @@ func (g *Game) init() {
 	g.bots = make([]*Bot, 0, 128)
 	g.asteroids = make([]*Asteroid, 0, 64)
 
+	g.camera.Zoom = 1
+
 	g.numRunners = runtime.NumCPU() - 1
 	if g.numRunners < 2 {
 		g.numRunners = 2
 	}
+
+	physics.Init()
+
 	g.botChan = make(chan *Bot, 1)
 	for i := 0; i < g.numRunners; i++ {
 		go BotRunner(g, g.botChan)
@@ -56,9 +61,9 @@ func (g *Game) init() {
 }
 
 // Update is the main update loop
-func (g *Game) Update() error {
+func (g *Game) Update(dt float32) {
 	if g.paused && !g.doStep {
-		return nil
+		return
 	}
 	g.doStep = false
 
@@ -69,8 +74,6 @@ func (g *Game) Update() error {
 			g.botChan <- bot
 		}
 		g.wg.Wait()
-		//g.space.Step(1.0 / float64(ebiten.TPS()))
 		g.step++
 	}
-	return nil
 }

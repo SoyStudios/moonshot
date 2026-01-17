@@ -5,7 +5,6 @@ import (
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-kit/log"
-	"github.com/jakecoffman/cp"
 	"github.com/pkg/errors"
 )
 
@@ -44,17 +43,14 @@ func runMain() int {
 	// window
 	w, h := rl.GetScreenWidth(), rl.GetScreenHeight()
 	ratio := float64(w) / float64(h)
-	rl.InitWindow(windowWidth, int32(float64(w)/ratio), title)
-	g := &Game{p: &Player{}}
+	g := &Game{}
 	g.w = windowWidth
 	g.h = int(float64(g.w) / ratio)
 
+	rl.InitWindow(int32(g.w), int32(g.h), title)
+	defer rl.CloseWindow()
+
 	g.cyclesPerTick = 1
-	g.space = cp.NewSpace()
-	g.space.Iterations = 1
-	// see https://chipmunk-physics.net/release/ChipmunkLatest-Docs/#cpSpace-SpatialHash
-	// Experimenting with the spatial index
-	g.space.UseSpatialHash(2.0, 10000)
 
 	g.init()
 
@@ -66,6 +62,54 @@ func runMain() int {
 		scenarios["all"].LoadScenario(g)
 	} else {
 		scen.LoadScenario(g)
+	}
+
+	rl.SetTargetFPS(60)
+
+	for !rl.WindowShouldClose() {
+		dt := rl.GetFrameTime()
+
+		if rl.IsKeyPressed(rl.KeySpace) {
+			g.paused = !g.paused
+		}
+		if rl.IsMouseButtonDown(rl.MouseRightButton) {
+			delta := rl.GetMouseDelta()
+			delta = rl.Vector2Scale(delta, -1/g.camera.Zoom)
+			g.camera.Target = rl.Vector2Add(g.camera.Target, delta)
+		}
+
+		wheel := rl.GetMouseWheelMove()
+		if wheel != 0 {
+			mouseWorldPos := rl.GetScreenToWorld2D(rl.GetMousePosition(), g.camera)
+			g.camera.Offset = rl.GetMousePosition()
+			g.camera.Target = mouseWorldPos
+			const zoomIncrement = 0.0125
+			zoom := zoomIncrement * wheel
+			g.camera.Zoom += zoom
+			if g.camera.Zoom <= 0 {
+				g.camera.Zoom = zoomIncrement
+			}
+		}
+
+		g.Update(dt)
+
+		rl.BeginDrawing()
+
+		rl.ClearBackground(rl.Black)
+
+		rl.BeginMode2D(g.camera)
+		for _, b := range g.bots {
+			rl.DrawCircleV(
+				rl.Vector2{X: float32(b.Position().X), Y: float32(b.Position().Y)},
+				8, rl.White)
+		}
+
+		//		for _, a := range g.asteroids {
+		//
+		//		}
+		rl.EndMode2D()
+
+		rl.EndDrawing()
 	}
 
 	return 0

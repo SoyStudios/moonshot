@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"math/rand"
+
 	"sort"
 
 	"github.com/jakecoffman/cp"

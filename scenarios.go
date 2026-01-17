@@ -138,8 +138,6 @@ END
 		b.SetPosition(cp.Vector{X: 200, Y: 200})
 		b.machine.program = program
 		g.bots = append(g.bots, b)
-
-		g.ui.info = b
 	},
 
 	"asteroid": func(g *Game) {
