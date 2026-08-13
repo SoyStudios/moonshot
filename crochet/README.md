@@ -100,13 +100,15 @@ into recognisable fabric that deforms with the simulation. It's purely cosmetic
 — the physics still sees one particle per stitch. Press `M` to switch to the
 **wire view**, which shows the raw yarn paths and structural links.
 
-Lighting runs on the **GPU**: unit cylinder/sphere meshes are drawn through a
-GLSL material that does per-fragment diffuse + specular shading, with the
-material **sheen** as a uniform, so matte wool and glossy silk look different.
-The shader also fakes **twisted-fibre yarn**: from each fragment's angle around
-the tube and distance along it, a helical "ply" pattern perturbs the normal
-(catching the light on the ridges) and shadows the grooves between plies, so the
-yarn looks spun rather than moulded. Stitches carry a **stripe** palette for
+Lighting runs on the **GPU** through a GLSL material tuned to look like yarn
+rather than plastic. Diffuse is soft and wrapped (fibres scatter light around
+the terminator, so there's no hard shadow edge); the highlight is a dim, broad
+fabric sheen plus a faint grazing rim, never a tight hot spot — the material
+**sheen** uniform scales it, so matte wool and glossy silk still differ. On top
+of that the surface is roughened two ways: a helical **ply** pattern (from each
+fragment's angle around the tube and distance along it) carves twisted-strand
+ridges and grooves, and fine coherent **noise jitters the normal** for a fuzzy,
+light-scattering micro-surface. Stitches carry a **stripe** palette for
 self-striping colourwork. (If the shader can't compile on a limited driver, the
 renderer falls back to flat cylinders so the demo still runs.)
 

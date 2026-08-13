@@ -109,9 +109,11 @@ func (e *Engine) drawStitchV(p, u, col, n rl.Vector3, c *pattern.StitchCell, rad
 	case 0: // full: two bowed arms with rounded tips
 		e.arc(bottom, topL, bulge, rad, c.Color)
 		e.arc(bottom, topR, bulge, rad, c.Color)
-	case 1: // straight V: one cylinder per arm, no bezier, no tips
+		e.renderer.node(bottom, rad, c.Color) // cap the shared base joint
+	case 1: // straight V: one cylinder per arm
 		e.renderer.segment(bottom, topL, rad, c.Color)
 		e.renderer.segment(bottom, topR, rad, c.Color)
+		e.renderer.node(bottom, rad, c.Color)
 	default: // far: a single bar standing in for the whole stitch
 		mid := rl.Vector3Lerp(topL, topR, 0.5)
 		e.renderer.segment(bottom, mid, rad, c.Color)

@@ -75,25 +75,58 @@ uniform vec4 colDiffuse;   // per-group yarn colour (raylib sets from material)
 uniform vec3 lightDir;     // direction toward the key light (normalized)
 uniform vec3 lightColor;
 uniform float ambient;     // base brightness in shadow
-uniform float sheen;       // specular strength (matte 0 .. glossy 1)
+uniform float sheen;       // sheen strength (matte 0 .. glossy 1)
 uniform vec3 viewPos;
 out vec4 finalColor;
 
+// Cheap coherent value noise for the fuzzy micro-surface.
+float hash(vec3 p) {
+    p = fract(p*vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y)*p.z);
+}
+float vnoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f*f*(3.0 - 2.0*f);
+    return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                   mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                   mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+
 void main() {
-    // Fake the plied-fibre relief: perturb the normal across the tube so the
-    // light catches the ridges, and darken the grooves between plies.
-    float g = sin(fragPhase);
+    vec3 N = normalize(fragNormal);
+    vec3 T = normalize(fragTangent);          // around the tube
+    vec3 B = normalize(cross(N, T));          // along the tube
+
+    // Coarse plied-fibre relief across the tube.
+    float g  = sin(fragPhase);
     float gc = cos(fragPhase);
-    vec3 N = normalize(fragNormal + fragTangent*(gc*0.40));
+    N = normalize(N + T*(gc*0.28));
+
+    // Fuzzy micro-roughness: jitter the normal with fine coherent noise so the
+    // surface scatters light like spun fibre instead of moulded plastic.
+    float nA = vnoise(fragPosition*38.0) - 0.5;
+    float nB = vnoise(fragPosition*38.0 + 19.3) - 0.5;
+    N = normalize(N + (T*nA + B*nB)*0.6);
 
     vec3 L = normalize(lightDir);
-    float diff = max(dot(N, L), 0.0);
     vec3 V = normalize(viewPos - fragPosition);
-    vec3 H = normalize(L + V);
-    float spec = pow(max(dot(N, H), 0.0), 20.0)*sheen*(0.5 + 0.5*gc);
 
-    float ao = 0.78 + 0.22*(0.5 + 0.5*g);   // groove shadowing between plies
-    vec3 lit = colDiffuse.rgb*(ambient + (1.0 - ambient)*diff)*ao + spec*lightColor;
+    // Soft wrapped diffuse: fibres scatter light around the terminator, so the
+    // shading is matte with no hard shadow edge.
+    float diff = clamp(dot(N, L)*0.5 + 0.5, 0.0, 1.0);
+
+    // Fabric sheen: a dim, broad highlight plus a faint grazing rim — never the
+    // tight hot spot of plastic.
+    vec3 H = normalize(L + V);
+    float broad = pow(max(dot(N, H), 0.0), 5.0);
+    float rim = pow(1.0 - max(dot(normalize(fragNormal), V), 0.0), 3.0);
+    float spec = (broad*0.10 + rim*0.12)*sheen;
+
+    float ao   = 0.82 + 0.18*(0.5 + 0.5*g);        // groove shadowing
+    float tint = 0.93 + 0.07*(nA + 0.5);           // subtle colour variation
+    vec3 lit = colDiffuse.rgb*tint*(ambient + (1.0 - ambient)*diff)*ao + spec*lightColor;
     finalColor = vec4(lit, colDiffuse.a);
 }
 `
