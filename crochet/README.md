@@ -147,10 +147,42 @@ sealed shape.
 Each `pattern.Stitch` carries a **gauge** (`Def{Width, Height}`) for
 `sc`/`hdc`/`dc`/`tr`, so taller stitches make taller rows.
 
+## Writing patterns
+
+The `pattern` package also reads crochet the way it's actually written.
+`pattern.Parse` turns standard notation into a `Pattern`, and `pattern.Build`
+materialises it — anchoring every stitch to the specific stitch(es) it's worked
+into, so increases (two into one) and decreases (one across two) have the right
+topology rather than a nearest-neighbour guess:
+
+```go
+p := pattern.MustParse(`
+    R1: 6 sc in magic ring
+    R2: inc x6            (12)
+    R3: (sc, inc) x6      (18)
+    R4: (2 sc, inc) x6    (24)
+    R5-9: sc              (24)
+    R10: (2 sc, dec) x6   (18)
+    R11: (sc, dec) x6     (12)
+    R12: dec x6           (6)
+`)
+fabric := pattern.Build(world, p, pattern.BuildConfig{
+    Gauge: 0.42, Center: math3.V(0, 3, 0), CloseTop: true, Yarn: yarn.DefaultConfig(),
+})
+fabric.Stuff(0.004) // stuff it
+```
+
+The parser handles round labels and ranges (`R5-9:`), repeats (`(sc, inc) x6`,
+`inc x6`, `x`/`*`/`×`), leading counts (`2 sc`), fill rounds (a bare `sc` means
+"one in each stitch"), the `sc2tog`/`dec` decrease spellings, and ignores
+stitch-count annotations like `(18)` and filler like "in each st". Each round's
+radius follows its stitch count, so the increases and decreases sculpt the
+silhouette; the demo's amigurumi ball is built straight from the text above.
+
 ## Extending
 
-- New shapes: add a builder to `pattern` returning a `*Fabric`, or drive
-  `Revolve` with a new count sequence.
+- New shapes: add a builder to `pattern` returning a `*Fabric`, drive `Revolve`
+  with a new count sequence, or just write a pattern for `Parse`/`Build`.
 - New stitches: extend `pattern.Stitch` / its `Def` gauge.
 - New physics: implement `physics.Constraint` (like the pressure/stuffing
   constraint) and add it to the world.

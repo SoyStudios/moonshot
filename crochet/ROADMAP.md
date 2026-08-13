@@ -16,9 +16,11 @@ worthwhile steps.
   lean — not just row spacing and a drawn V. Ties into self-collision (posts are
   collidable) and makes textured stitch patterns (front/back post, cables)
   possible.
-- **Increase / decrease placement.** Move beyond surfaces of revolution: place
-  increases and decreases at chosen stitches so amigurumi can be sculpted
-  (heads, snouts, limbs, tapered shapes) rather than only bell-curve counts.
+- **Increase / decrease placement.** ✅ Partly — `pattern.Build` anchors every
+  stitch to the specific stitch(es) it's worked into, so inc/dec topology is
+  correct and the round-by-round counts shape the silhouette. Still to do:
+  *positional* placement (increases clustered on one side) for asymmetric,
+  sculpted pieces — today each round is laid out as an even ring.
 - **Stitch texture library.** Bobbles, popcorns, front/back loop only, clusters,
   shells — each as a small builder that emits nodes + bonds, composable into
   rows and rounds.
@@ -27,12 +29,14 @@ worthwhile steps.
 
 ## Authoring
 
-- **Written-pattern parser.** Read standard written patterns
-  (`R1: 6 sc in magic ring`, `R2: inc ×6 (12)`, `R3: (sc, inc) ×6 (18)`) straight
-  into a `Fabric`. This is the bridge from "hand-coded scenes" to "paste a real
-  pattern and watch it."
-- **Pattern DSL / builder API.** A fluent Go API (`p.Round().Sc(6)`,
-  `p.Round().Inc(6)`) that the text parser targets, usable directly in code too.
+- **Written-pattern parser.** ✅ Done — `pattern.Parse` reads standard notation
+  (`R1: 6 sc in magic ring`, `R2: inc x6`, `R3: (sc, inc) x6`, ranges, fill
+  rounds, `sc2tog`) into a `Pattern`, and `pattern.Build` turns it into a
+  `Fabric`. Follow-ups: foundation-chain (flat) starts, colour changes and
+  loop-only (BLO/FLO) stitches in the notation, and round-level validation
+  (warn when a round's ops don't consume the round below).
+- **Pattern DSL / builder API.** A fluent Go API (`p.Round().Sc(6).Inc(6)`) over
+  the same `Op`/`Round` model the parser produces, for authoring in code.
 - **Gauge & yarn-weight presets.** Map real yarn weights (DK, worsted, aran) and
   hook sizes to gauge/radius so pieces come out at believable proportions.
 

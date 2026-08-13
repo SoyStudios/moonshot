@@ -112,28 +112,40 @@ func drapedSwatch() *engine.Scene {
 	return &engine.Scene{Name: "Draped swatch over a form (hdc, self-collision)", World: w, Fabrics: []*pattern.Fabric{f}}
 }
 
-// stuffedBall: an amigurumi ball built from per-round stitch counts, sealed at
-// both poles, inflated by a stuffing (pressure) constraint and held together
-// by self-collision. It settles on the ground like a stuffed toy.
+// ballPattern is a real written amigurumi pattern, parsed straight into the
+// engine — the increases and decreases shape a round stuffed ball.
+const ballPattern = `
+R1:  6 sc in magic ring
+R2:  inc x6            (12)
+R3:  (sc, inc) x6      (18)
+R4:  (2 sc, inc) x6    (24)
+R5:  (3 sc, inc) x6    (30)
+R6-9: sc               (30)
+R10: (3 sc, dec) x6    (24)
+R11: (2 sc, dec) x6    (18)
+R12: (sc, dec) x6      (12)
+R13: dec x6            (6)
+`
+
+// stuffedBall: an amigurumi ball built from the written pattern above (parsed
+// with pattern.Parse), sealed at the top, inflated by a stuffing constraint and
+// held together by self-collision. It settles on the ground like a stuffed toy.
 func stuffedBall() *engine.Scene {
 	w := physics.NewWorld()
 	w.Ground = true
 	w.GroundY = 0
 	w.SelfCollision = true
-	w.CollisionRadius = 0.12
+	w.CollisionRadius = 0.13
 
-	f := pattern.Revolve(w, pattern.RevolveConfig{
-		Counts:      pattern.SphereCounts(9, 6), // finer: 6,12,…,54,…,12,6
-		Stitch:      pattern.Single,
-		Gauge:       0.38,
-		Center:      math3.V(0, 3.2, 0),
-		CloseBottom: true,
-		CloseTop:    true,
-		Yarn:        wool(230, 120, 140),
+	f := pattern.Build(w, pattern.MustParse(ballPattern), pattern.BuildConfig{
+		Gauge:    0.42,
+		Center:   math3.V(0, 3.0, 0),
+		CloseTop: true,
+		Yarn:     wool(230, 120, 140),
 	})
 	f.Stuff(0.004) // internal stuffing pressure
 
-	return &engine.Scene{Name: "Stuffed amigurumi ball (pressure + self-collision)", World: w, Fabrics: []*pattern.Fabric{f}}
+	return &engine.Scene{Name: "Amigurumi ball (from a written pattern)", World: w, Fabrics: []*pattern.Fabric{f}}
 }
 
 // stripedBeanie: a hat worked in the round with a self-striping colourway.
