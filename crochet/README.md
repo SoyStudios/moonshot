@@ -104,6 +104,14 @@ Stitches carry a **stripe** palette for self-striping colourwork. (If the shader
 can't compile on a limited driver, the renderer falls back to flat cylinders so
 the demo still runs.)
 
+Drawing is **instanced and batched**: every cylinder/sphere is accumulated as a
+per-instance transform, grouped by colour+material, and each group is issued as
+a single `DrawMeshInstanced` call — so a whole fabric costs a handful of draw
+calls instead of thousands. Each stitch also picks a **level of detail** from
+how large it appears on screen: a full bowed V up close, a straight V at middle
+distance, a single bar when far away, cutting geometry where it wouldn't be
+seen.
+
 ## How a crochet piece is built
 
 A `pattern` builder lays out one particle per stitch, threads a continuous yarn

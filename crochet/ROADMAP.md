@@ -54,6 +54,10 @@ worthwhile steps.
   material (see `engine/yarnshader.go`). Follow-ups: multiple lights, shadow
   mapping, ambient occlusion in the stitch valleys, and a fuzzy/fibre "halo" for
   a yarn-like silhouette.
+- **Batching & LOD.** ✅ Instanced draws grouped by colour, plus per-stitch
+  level of detail (full V → straight V → single bar by apparent size). Follow-up:
+  a baked per-fabric mesh with vertex colours for a true single draw call, and
+  frustum culling of off-screen stitches.
 - **Real tube meshes.** Generate swept tube geometry with proper normals and UVs
   for texture (twist lines, ply) instead of stacked cylinders.
 - **Export.** Save a posed piece to a mesh (OBJ/glTF) for rendering elsewhere or

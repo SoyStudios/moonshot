@@ -36,6 +36,10 @@ type Config struct {
 	// headless environment; leave empty for normal interactive use.
 	Screenshot       string
 	ScreenshotFrames int
+
+	// CamDistance, when > 0, sets the initial camera orbit distance (otherwise
+	// a default is used). Useful for framing previews / exercising LOD.
+	CamDistance float64
 }
 
 // DefaultConfig returns a reasonable window/loop configuration.
@@ -89,6 +93,9 @@ func New(cfg Config, builders ...func() *Scene) *Engine {
 	}
 	e.scene = builders[0]()
 	e.orbit = newOrbit(sceneCenter(e.scene))
+	if cfg.CamDistance > 0 {
+		e.orbit.distance = cfg.CamDistance
+	}
 	return e
 }
 
@@ -197,6 +204,7 @@ func (e *Engine) draw() {
 	for _, f := range e.scene.Fabrics {
 		e.drawFabric(f)
 	}
+	e.renderer.flush() // all batched yarn geometry, in a few instanced draws
 	e.drawColliders()
 	rl.EndMode3D()
 

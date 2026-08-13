@@ -22,17 +22,40 @@ import (
 // stockinette-like fabric, and because everything is derived from the current
 // particle positions, the stitches deform with the simulation.
 
-// drawStitchFace renders a fabric as its field of stitch Vs.
+// drawStitchFace renders a fabric as its field of stitch Vs, picking a
+// level of detail per stitch from how large it appears on screen.
 func (e *Engine) drawStitchFace(f *pattern.Fabric) {
 	e.renderer.setMaterial(f.Material)
 	rad := float32(f.Radius) * 1.1
+	cam := e.cam.Position
 	for i := range f.Cells {
-		e.drawStitch(f.World, &f.Cells[i], rad)
+		c := &f.Cells[i]
+		lod := stitchLOD(cam, v(f.World.Particles[c.Node].Pos), c.W, c.H)
+		e.drawStitch(f.World, c, rad, lod)
 	}
 }
 
-// drawStitch draws a single stitch cell as a bowed V.
-func (e *Engine) drawStitch(w *physics.World, c *pattern.StitchCell, rad float32) {
+// stitchLOD chooses 0 (full bowed V), 1 (straight V) or 2 (single bar) from the
+// stitch's apparent size — its world size over its distance to the camera.
+func stitchLOD(cam, p rl.Vector3, w, h float64) int {
+	dx, dy, dz := float64(cam.X-p.X), float64(cam.Y-p.Y), float64(cam.Z-p.Z)
+	dist := math.Sqrt(dx*dx + dy*dy + dz*dz)
+	if dist < 1e-3 {
+		return 0
+	}
+	apparent := (w + h) * 0.5 / dist
+	switch {
+	case apparent > 0.03:
+		return 0
+	case apparent > 0.012:
+		return 1
+	default:
+		return 2
+	}
+}
+
+// drawStitch draws a single stitch cell as a bowed V at the given LOD.
+func (e *Engine) drawStitch(w *physics.World, c *pattern.StitchCell, rad float32, lod int) {
 	p := v(w.Particles[c.Node].Pos)
 	u, okU := cellDir(w, c.Left, c.Right, c.Node)
 	vv, okV := cellDir(w, c.Down, c.Up, c.Node)
@@ -62,8 +85,17 @@ func (e *Engine) drawStitch(w *physics.World, c *pattern.StitchCell, rad float32
 	topL := rl.Vector3Add(rl.Vector3Subtract(p, hw), up)
 	topR := rl.Vector3Add(rl.Vector3Add(p, hw), up)
 
-	e.arc(bottom, topL, bulge, rad, c.Color)
-	e.arc(bottom, topR, bulge, rad, c.Color)
+	switch lod {
+	case 0: // full: two bowed arms with rounded tips
+		e.arc(bottom, topL, bulge, rad, c.Color)
+		e.arc(bottom, topR, bulge, rad, c.Color)
+	case 1: // straight V: one cylinder per arm, no bezier, no tips
+		e.renderer.segment(bottom, topL, rad, c.Color)
+		e.renderer.segment(bottom, topR, rad, c.Color)
+	default: // far: a single bar standing in for the whole stitch
+		mid := rl.Vector3Lerp(topL, topR, 0.5)
+		e.renderer.segment(bottom, mid, rad, c.Color)
+	}
 }
 
 // arc draws a yarn strand from a to b, bowed by `bulge` at its midpoint, as a

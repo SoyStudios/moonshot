@@ -2,40 +2,44 @@ package engine
 
 import (
 	"math"
+	"unsafe"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 
 	"github.com/SoyStudios/moonshot/crochet/yarn"
 )
 
-// GPU lighting. Instead of shading each yarn segment on the CPU, the renderer
-// draws unit cylinder/sphere meshes (which carry vertex normals) through a GLSL
-// material. raylib feeds the shader the model, normal and MVP matrices plus the
-// per-draw diffuse colour automatically; we supply the light and the material's
-// sheen/ambient as uniforms. Lighting — diffuse + a specular highlight — is
-// then computed per fragment on the GPU, so tubes look round and glossy yarn
-// reads differently from matte wool.
+// GPU lighting + instanced batching.
 //
-// If the shader fails to compile (unusual, but possible on a limited driver)
-// the renderer falls back to raylib's flat immediate-mode cylinders so the demo
-// still runs.
+// Yarn is drawn as two primitives: a unit cylinder (segments) and a unit sphere
+// (joints/tips), both carrying vertex normals. Rather than issue one draw call
+// per segment, the renderer *batches*: every segment/sphere is accumulated as a
+// per-instance transform, grouped by (colour, material). At the end of the
+// frame each group is drawn with a single rl.DrawMeshInstanced call, so a whole
+// fabric costs only a handful of draw calls (one per distinct colour) instead
+// of thousands.
+//
+// A GLSL material does per-fragment diffuse + specular shading; the per-instance
+// model matrix arrives through the instanceTransform vertex attribute, and the
+// group's colour/sheen/ambient come in as uniforms.
+//
+// If the shader fails to compile (rare, on a limited driver) the renderer falls
+// back to raylib's flat immediate-mode cylinders so the demo still runs.
 
 const yarnVertexShader = `
 #version 330
-in vec3 vertexPosition;
-in vec3 vertexNormal;
-in vec4 vertexColor;
+layout(location = 0) in vec3 vertexPosition;
+layout(location = 2) in vec3 vertexNormal;
+layout(location = 6) in mat4 instanceTransform;
 uniform mat4 mvp;
-uniform mat4 matModel;
-uniform mat4 matNormal;
 out vec3 fragPosition;
 out vec3 fragNormal;
-out vec4 fragColor;
 void main() {
-    fragPosition = vec3(matModel*vec4(vertexPosition, 1.0));
-    fragNormal   = normalize(vec3(matNormal*vec4(vertexNormal, 1.0)));
-    fragColor    = vertexColor;
-    gl_Position  = mvp*vec4(vertexPosition, 1.0);
+    vec4 world = instanceTransform*vec4(vertexPosition, 1.0);
+    fragPosition = world.xyz;
+    mat3 nm = mat3(transpose(inverse(instanceTransform)));
+    fragNormal = normalize(nm*vertexNormal);
+    gl_Position = mvp*world;
 }
 `
 
@@ -43,8 +47,7 @@ const yarnFragmentShader = `
 #version 330
 in vec3 fragPosition;
 in vec3 fragNormal;
-in vec4 fragColor;
-uniform vec4 colDiffuse;   // per-draw yarn colour (raylib sets from material)
+uniform vec4 colDiffuse;   // per-group yarn colour (raylib sets from material)
 uniform vec3 lightDir;     // direction toward the key light (normalized)
 uniform vec3 lightColor;
 uniform float ambient;     // base brightness in shadow
@@ -55,16 +58,20 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 L = normalize(lightDir);
     float diff = max(dot(N, L), 0.0);
-
     vec3 V = normalize(viewPos - fragPosition);
     vec3 H = normalize(L + V);
     float spec = pow(max(dot(N, H), 0.0), 24.0)*sheen;
-
-    vec3 base = colDiffuse.rgb*fragColor.rgb;
-    vec3 lit  = base*(ambient + (1.0 - ambient)*diff) + spec*lightColor;
-    finalColor = vec4(lit, colDiffuse.a*fragColor.a);
+    vec3 lit = colDiffuse.rgb*(ambient + (1.0 - ambient)*diff) + spec*lightColor;
+    finalColor = vec4(lit, colDiffuse.a);
 }
 `
+
+// batchKey groups instances that can be drawn together: same colour and same
+// material response.
+type batchKey struct {
+	col            yarn.Color
+	sheen, ambient float32
+}
 
 type yarnRenderer struct {
 	lit      bool
@@ -78,14 +85,19 @@ type yarnRenderer struct {
 	locAmbient    int32
 	locSheen      int32
 	locViewPos    int32
+
+	curSheen, curAmbient float32
+	cylBatches           map[batchKey][]rl.Matrix
+	sphBatches           map[batchKey][]rl.Matrix
 }
 
-// newYarnRenderer builds the GPU resources. Must be called after InitWindow
-// (a GL context has to exist).
+// newYarnRenderer builds the GPU resources. Must be called after InitWindow.
 func newYarnRenderer() *yarnRenderer {
 	r := &yarnRenderer{
-		cylinder: rl.GenMeshCylinder(1, 1, 10),
-		sphere:   rl.GenMeshSphere(1, 8, 12),
+		cylinder:   rl.GenMeshCylinder(1, 1, 8),
+		sphere:     rl.GenMeshSphere(1, 6, 10),
+		cylBatches: map[batchKey][]rl.Matrix{},
+		sphBatches: map[batchKey][]rl.Matrix{},
 	}
 	r.shader = rl.LoadShaderFromMemory(yarnVertexShader, yarnFragmentShader)
 	r.locLightDir = rl.GetShaderLocation(r.shader, "lightDir")
@@ -98,56 +110,86 @@ func newYarnRenderer() *yarnRenderer {
 	r.locSheen = rl.GetShaderLocation(r.shader, "sheen")
 	r.locViewPos = rl.GetShaderLocation(r.shader, "viewPos")
 
+	// Route the per-instance model matrix through the instanceTransform
+	// attribute (this is what turns on GPU instancing in DrawMeshInstanced).
+	locs := unsafe.Slice(r.shader.Locs, 32)
+	locs[rl.ShaderLocMatrixModel] = rl.GetShaderLocationAttrib(r.shader, "instanceTransform")
+
 	r.material = rl.LoadMaterialDefault()
 	r.material.Shader = r.shader
 
-	// The key light is fixed in world space (from the upper-left front).
 	toLight := rl.Vector3Normalize(rl.NewVector3(0.45, 1.0, 0.35))
 	rl.SetShaderValue(r.shader, r.locLightDir, []float32{toLight.X, toLight.Y, toLight.Z}, rl.ShaderUniformVec3)
 	rl.SetShaderValue(r.shader, r.locLightColor, []float32{1.0, 0.98, 0.94}, rl.ShaderUniformVec3)
 	return r
 }
 
-// beginFrame updates the per-frame view position uniform.
+// beginFrame updates the view position and resets the per-frame batches.
 func (r *yarnRenderer) beginFrame(camPos rl.Vector3) {
 	if !r.lit {
 		return
 	}
 	rl.SetShaderValue(r.shader, r.locViewPos, []float32{camPos.X, camPos.Y, camPos.Z}, rl.ShaderUniformVec3)
-}
-
-// setMaterial selects the sheen/ambient for the strand about to be drawn.
-func (r *yarnRenderer) setMaterial(m yarn.Material) {
-	if !r.lit {
-		return
+	for k := range r.cylBatches {
+		r.cylBatches[k] = r.cylBatches[k][:0]
 	}
-	rl.SetShaderValue(r.shader, r.locAmbient, []float32{float32(m.Ambient)}, rl.ShaderUniformFloat)
-	rl.SetShaderValue(r.shader, r.locSheen, []float32{float32(m.Sheen)}, rl.ShaderUniformFloat)
+	for k := range r.sphBatches {
+		r.sphBatches[k] = r.sphBatches[k][:0]
+	}
 }
 
-// segment draws a yarn section from a to b as a lit cylinder of the given radius.
+// setMaterial selects the sheen/ambient for the geometry about to be queued.
+func (r *yarnRenderer) setMaterial(m yarn.Material) {
+	r.curSheen = float32(m.Sheen)
+	r.curAmbient = float32(m.Ambient)
+}
+
+// segment queues a yarn section from a to b as a cylinder of the given radius.
 func (r *yarnRenderer) segment(a, b rl.Vector3, radius float32, col yarn.Color) {
 	if !r.lit {
-		rl.DrawCylinderEx(a, b, radius, radius, 8, toRL(col))
+		rl.DrawCylinderEx(a, b, radius, radius, 6, toRL(col))
 		return
 	}
-	tf := cylinderTransform(a, b, radius)
-	r.material.GetMap(rl.MapDiffuse).Color = toRL(col)
-	rl.DrawMesh(r.cylinder, r.material, tf)
+	k := batchKey{col, r.curSheen, r.curAmbient}
+	r.cylBatches[k] = append(r.cylBatches[k], cylinderTransform(a, b, radius))
 }
 
-// node draws a rounded joint sphere.
+// node queues a rounded joint sphere.
 func (r *yarnRenderer) node(pos rl.Vector3, radius float32, col yarn.Color) {
 	if !r.lit {
 		rl.DrawSphere(pos, radius, toRL(col))
 		return
 	}
+	k := batchKey{col, r.curSheen, r.curAmbient}
 	tf := rl.MatrixMultiply(
 		rl.MatrixScale(radius, radius, radius),
 		rl.MatrixTranslate(pos.X, pos.Y, pos.Z),
 	)
-	r.material.GetMap(rl.MapDiffuse).Color = toRL(col)
-	rl.DrawMesh(r.sphere, r.material, tf)
+	r.sphBatches[k] = append(r.sphBatches[k], tf)
+}
+
+// flush draws all queued geometry as a handful of instanced draw calls.
+func (r *yarnRenderer) flush() {
+	if !r.lit {
+		return
+	}
+	for k, mats := range r.cylBatches {
+		if len(mats) > 0 {
+			r.drawBatch(r.cylinder, k, mats)
+		}
+	}
+	for k, mats := range r.sphBatches {
+		if len(mats) > 0 {
+			r.drawBatch(r.sphere, k, mats)
+		}
+	}
+}
+
+func (r *yarnRenderer) drawBatch(mesh rl.Mesh, k batchKey, mats []rl.Matrix) {
+	rl.SetShaderValue(r.shader, r.locAmbient, []float32{k.ambient}, rl.ShaderUniformFloat)
+	rl.SetShaderValue(r.shader, r.locSheen, []float32{k.sheen}, rl.ShaderUniformFloat)
+	r.material.GetMap(rl.MapDiffuse).Color = toRL(k.col)
+	rl.DrawMeshInstanced(mesh, r.material, mats, len(mats))
 }
 
 func (r *yarnRenderer) unload() {
@@ -172,14 +214,12 @@ func cylinderTransform(a, b rl.Vector3, radius float32) rl.Matrix {
 	return rl.MatrixMultiply(rl.MatrixMultiply(scale, rot), trans)
 }
 
-// alignYTo returns a rotation that turns +Y onto the (already length-known)
-// direction vector.
+// alignYTo returns a rotation that turns +Y onto the (length-known) direction.
 func alignYTo(dir rl.Vector3, length float32) rl.Matrix {
 	d := rl.NewVector3(dir.X/length, dir.Y/length, dir.Z/length)
 	axis := rl.Vector3CrossProduct(rl.NewVector3(0, 1, 0), d)
 	axisLen := float32(math.Sqrt(float64(axis.X*axis.X + axis.Y*axis.Y + axis.Z*axis.Z)))
 	if axisLen < 1e-6 {
-		// Parallel to +Y (same or opposite direction).
 		if d.Y >= 0 {
 			return rl.MatrixScale(1, 1, 1) // identity
 		}

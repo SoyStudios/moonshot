@@ -36,6 +36,7 @@ func main() {
 	if shot := os.Getenv("CROCHET_SHOT"); shot != "" {
 		cfg.Screenshot = shot
 		cfg.ScreenshotFrames = envInt("CROCHET_FRAMES", 300)
+		cfg.CamDistance = float64(envInt("CROCHET_DIST", 0))
 		if n := envInt("CROCHET_SCENE", 0); n >= 0 && n < len(builders) {
 			builders = builders[n : n+1]
 		}
