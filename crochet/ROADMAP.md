@@ -6,10 +6,16 @@ worthwhile steps.
 
 ## Modelling fidelity
 
+- **Stitch rendering.** ✅ Fake per-stitch "V" geometry (see
+  `engine/stitchrender.go`) makes fabric read as crochet without extra physics.
+  Follow-ups: distinct silhouettes per stitch type (a `dc` V taller and with a
+  visible post, a bobble as a cluster), and the front-loop/back-loop "bar" that
+  sits between rows.
 - **Stitch posts.** Subdivide tall stitches (`dc`, `tr`) into flexible legs so
-  the `Stitch` gauge drives real geometry — a post that can bend and lean — not
-  just row spacing. Ties into self-collision (posts are collidable) and makes
-  textured stitch patterns (front/back post, cables) possible.
+  the `Stitch` gauge drives real *physics* geometry — a post that can bend and
+  lean — not just row spacing and a drawn V. Ties into self-collision (posts are
+  collidable) and makes textured stitch patterns (front/back post, cables)
+  possible.
 - **Increase / decrease placement.** Move beyond surfaces of revolution: place
   increases and decreases at chosen stitches so amigurumi can be sculpted
   (heads, snouts, limbs, tapered shapes) rather than only bell-curve counts.

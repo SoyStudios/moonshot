@@ -62,11 +62,12 @@ type Engine struct {
 	orbit    orbitCam
 	renderer *yarnRenderer
 
-	paused    bool
-	showLinks bool
-	showNodes bool
-	windOn    bool
-	wind      math3.Vec3
+	paused     bool
+	stitchView bool
+	showLinks  bool
+	showNodes  bool
+	windOn     bool
+	wind       math3.Vec3
 
 	accumulator float64
 }
@@ -79,11 +80,12 @@ func New(cfg Config, builders ...func() *Scene) *Engine {
 		panic("engine.New: need at least one scene builder")
 	}
 	e := &Engine{
-		cfg:       cfg,
-		builders:  builders,
-		showLinks: true,
-		showNodes: true,
-		wind:      math3.V(6, 0, 0),
+		cfg:        cfg,
+		builders:   builders,
+		stitchView: true,
+		showLinks:  true,
+		showNodes:  true,
+		wind:       math3.V(6, 0, 0),
 	}
 	e.scene = builders[0]()
 	e.orbit = newOrbit(sceneCenter(e.scene))
@@ -153,6 +155,9 @@ func (e *Engine) handleInput() {
 	if rl.IsKeyPressed(rl.KeyN) {
 		e.showNodes = !e.showNodes
 	}
+	if rl.IsKeyPressed(rl.KeyM) {
+		e.stitchView = !e.stitchView
+	}
 	e.windOn = rl.IsKeyDown(rl.KeyW)
 
 	e.orbit.handleInput()
@@ -199,6 +204,23 @@ func (e *Engine) draw() {
 }
 
 func (e *Engine) drawFabric(f *pattern.Fabric) {
+	// The stitch view fakes crochet geometry (a bowed V per stitch); the wire
+	// view shows the underlying yarn paths and structural links.
+	if e.stitchView && len(f.Cells) > 0 {
+		e.drawStitchFace(f)
+	} else {
+		e.drawWire(f)
+	}
+
+	// Highlight pinned nodes in either view.
+	e.renderer.setMaterial(yarn.Material{Sheen: 0.2, Ambient: 0.5})
+	for _, p := range f.Pins {
+		e.renderer.node(v(f.World.Particles[p].Pos), float32(f.Radius)*1.6, yarn.Color{R: 240, G: 220, B: 90, A: 255})
+	}
+}
+
+// drawWire renders the fabric as its raw yarn paths and cross-links.
+func (e *Engine) drawWire(f *pattern.Fabric) {
 	w := f.World
 	r := e.renderer
 
@@ -231,12 +253,6 @@ func (e *Engine) drawFabric(f *pattern.Fabric) {
 			r.segment(a, b, lr, lc)
 		}
 	}
-
-	// Highlight pinned nodes.
-	r.setMaterial(yarn.Material{Sheen: 0.2, Ambient: 0.5})
-	for _, p := range f.Pins {
-		r.node(v(w.Particles[p].Pos), float32(f.Radius)*1.6, yarn.Color{R: 240, G: 220, B: 90, A: 255})
-	}
 }
 
 func (e *Engine) drawColliders() {
@@ -262,8 +278,8 @@ func (e *Engine) drawHUD() {
 	}
 	rl.DrawText(state, 12, 60, 18, rl.NewColor(240, 220, 90, 255))
 
-	help := "drag: orbit   wheel: zoom   right-drag: pan   " +
-		"[tab] next  [space] pause  [r] reset  [w] wind  [l] links  [n] nodes"
+	help := "drag: orbit   wheel: zoom   right-drag: pan   [tab] next  " +
+		"[space] pause  [r] reset  [w] wind  [m] stitch/wire  [l] links  [n] nodes"
 	rl.DrawText(help, 12, int32(e.cfg.Height)-26, 16, rl.Gray)
 	rl.DrawFPS(int32(e.cfg.Width)-90, 10)
 }

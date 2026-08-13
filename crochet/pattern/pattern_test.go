@@ -81,6 +81,48 @@ func TestFabricStaysFinite(t *testing.T) {
 	}
 }
 
+func TestSwatchBuildsStitchCells(t *testing.T) {
+	w := physics.NewWorld()
+	f := Swatch(w, SwatchConfig{
+		Rows: 5, Cols: 7,
+		Origin: math3.V(0, 5, 0),
+		U:      math3.V(0.5, 0, 0),
+		V:      math3.V(0, -0.5, 0),
+		Yarn:   yarn.DefaultConfig(),
+	})
+	if len(f.Cells) != 5*7 {
+		t.Fatalf("expected 35 stitch cells, got %d", len(f.Cells))
+	}
+	// A middle stitch has all four neighbours; a corner has two.
+	corner := f.Cells[0] // row 0, col 0
+	if corner.Left != -1 || corner.Down != -1 {
+		t.Fatalf("corner cell should have no Left/Down neighbour: %+v", corner)
+	}
+	if corner.Right < 0 || corner.Up < 0 {
+		t.Fatalf("corner cell should have Right and Up neighbours: %+v", corner)
+	}
+	if corner.W <= 0 || corner.H <= 0 {
+		t.Fatalf("cell should carry positive gauge W/H: %+v", corner)
+	}
+}
+
+func TestRingCellsWrapAround(t *testing.T) {
+	w := physics.NewWorld()
+	f := Tube(w, TubeConfig{
+		Rounds: 4, Stitches: 10, Radius: 2, RiseY: 0.4,
+		Center: math3.V(0, 1, 0), Yarn: yarn.DefaultConfig(),
+	})
+	if len(f.Cells) != 4*10 {
+		t.Fatalf("expected 40 cells, got %d", len(f.Cells))
+	}
+	// Every cell in a round has both horizontal neighbours (the ring wraps).
+	for _, c := range f.Cells {
+		if c.Left < 0 || c.Right < 0 {
+			t.Fatalf("ring cell missing a horizontal neighbour: %+v", c)
+		}
+	}
+}
+
 func TestSphereCountsIsSymmetricBell(t *testing.T) {
 	c := SphereCounts(3, 6) // 6,12,18,12,6
 	want := []int{6, 12, 18, 12, 6}

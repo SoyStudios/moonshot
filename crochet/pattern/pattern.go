@@ -24,12 +24,26 @@ import (
 	"github.com/SoyStudios/moonshot/crochet/yarn"
 )
 
+// StitchCell describes one stitch for rendering it as a recognisable crochet
+// "V" rather than a bare lattice node. It names the stitch's particle plus its
+// neighbours in the fabric, from which the renderer derives the local surface
+// frame (row direction × column direction → outward normal) and draws a small
+// bowed V of the right size and colour. It is purely cosmetic — the physics
+// still sees one particle per stitch.
+type StitchCell struct {
+	Node                  int        // this stitch's particle
+	Left, Right, Down, Up int        // neighbour particles, or -1 if absent
+	W, H                  float64    // stitch width and height in world units
+	Color                 yarn.Color // banded/striped colour of this stitch
+}
+
 // Fabric is a materialised crochet piece: the yarn paths and cross-links that
 // live inside World, plus the nodes that were pinned.
 type Fabric struct {
 	World    *physics.World
 	Strands  []*yarn.Strand // thick yarn paths (rows / rounds)
 	Links    [][2]int       // thin structural cross-links between rows
+	Cells    []StitchCell   // per-stitch cells for crochet-style rendering
 	Pins     []int          // pinned particle indices
 	Nodes    []int          // every particle this fabric created
 	Radius   float64        // yarn radius (used to render Links)
@@ -139,6 +153,7 @@ func Swatch(w *physics.World, cfg SwatchConfig) *Fabric {
 	}
 
 	f.applyPins(pinsFor(cfg.Pin, grid))
+	f.buildGridCells(grid, cfg.U.Len(), cfg.V.Len(), cfg.Yarn)
 	return f
 }
 
@@ -196,6 +211,11 @@ func Tube(w *physics.World, cfg TubeConfig) *Fabric {
 	if cfg.PinTopRound {
 		f.applyPins(grid[cfg.Rounds-1])
 	}
+	radii := make([]float64, cfg.Rounds)
+	for r := range radii {
+		radii[r] = cfg.Radius
+	}
+	f.buildRingCells(grid, radii, cfg.RiseY, cfg.Yarn)
 	return f
 }
 
@@ -224,9 +244,11 @@ func Disc(w *physics.World, cfg DiscConfig) *Fabric {
 
 	center := f.add(cfg.Center, cfg.Yarn.SegmentMass)
 	rings := make([][]int, cfg.Rounds)
+	radii := make([]float64, cfg.Rounds)
 	for r := 0; r < cfg.Rounds; r++ {
 		n := cfg.StartStitch + cfg.Increase*r
 		radius := cfg.RingSpacing * float64(r+1)
+		radii[r] = radius
 		rings[r] = make([]int, n)
 		for i := 0; i < n; i++ {
 			a := 2 * math.Pi * float64(i) / float64(n)
@@ -245,6 +267,7 @@ func Disc(w *physics.World, cfg DiscConfig) *Fabric {
 	if cfg.PinCenter {
 		f.applyPins([]int{center})
 	}
+	f.buildRingCells(rings, radii, cfg.RingSpacing, cfg.Yarn)
 	return f
 }
 
@@ -347,6 +370,7 @@ func Revolve(w *physics.World, cfg RevolveConfig) *Fabric {
 			f.applyPins(rings[nr-1])
 		}
 	}
+	f.buildRingCells(rings, radius, rowH, cfg.Yarn)
 	return f
 }
 
@@ -386,6 +410,76 @@ func ringStrand(w *physics.World, ring []int, cfg yarn.Config) *yarn.Strand {
 	}
 	s.Connect(w, cfg)
 	return s
+}
+
+// stripeColor returns the colour of band index (row or round), honouring a
+// stripe palette; falls back to the base colour when no stripe is set.
+func stripeColor(cfg yarn.Config, band int) yarn.Color {
+	if len(cfg.Stripe) == 0 {
+		return cfg.Color
+	}
+	w := cfg.StripeWidth
+	if w < 1 {
+		w = 1
+	}
+	return cfg.Stripe[(band/w)%len(cfg.Stripe)]
+}
+
+// buildGridCells emits one StitchCell per node of a rectangular grid, wiring up
+// the four orthogonal neighbours (−1 where the grid ends).
+func (f *Fabric) buildGridCells(grid [][]int, w, h float64, cfg yarn.Config) {
+	rows := len(grid)
+	if rows == 0 {
+		return
+	}
+	cols := len(grid[0])
+	at := func(r, c int) int {
+		if r < 0 || r >= rows || c < 0 || c >= cols {
+			return -1
+		}
+		return grid[r][c]
+	}
+	for r := 0; r < rows; r++ {
+		col := stripeColor(cfg, r)
+		for c := 0; c < cols; c++ {
+			f.Cells = append(f.Cells, StitchCell{
+				Node: grid[r][c],
+				Left: at(r, c-1), Right: at(r, c+1),
+				Down: at(r-1, c), Up: at(r+1, c),
+				W: w, H: h, Color: col,
+			})
+		}
+	}
+}
+
+// buildRingCells emits cells for a stack of rings. Left/Right wrap around each
+// ring; Down/Up map to the nearest stitch in the adjacent ring.
+func (f *Fabric) buildRingCells(rings [][]int, radius []float64, h float64, cfg yarn.Config) {
+	nearest := func(i, n, m int) int { return int(math.Round(float64(i)/float64(n)*float64(m))) % m }
+	for r := 0; r < len(rings); r++ {
+		n := len(rings[r])
+		if n == 0 {
+			continue
+		}
+		w := 2 * math.Pi * radius[r] / float64(n)
+		col := stripeColor(cfg, r)
+		for i := 0; i < n; i++ {
+			down, up := -1, -1
+			if r > 0 && len(rings[r-1]) > 0 {
+				down = rings[r-1][nearest(i, n, len(rings[r-1]))]
+			}
+			if r+1 < len(rings) && len(rings[r+1]) > 0 {
+				up = rings[r+1][nearest(i, n, len(rings[r+1]))]
+			}
+			f.Cells = append(f.Cells, StitchCell{
+				Node:  rings[r][i],
+				Left:  rings[r][(i-1+n)%n],
+				Right: rings[r][(i+1)%n],
+				Down:  down, Up: up,
+				W: w, H: h, Color: col,
+			})
+		}
+	}
 }
 
 // bandRound recolours a round's strand to a solid stripe colour when the yarn

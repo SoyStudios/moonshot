@@ -37,6 +37,7 @@ A window opens with several crochet pieces you can cycle through:
 | `Space` / `P` | pause / resume |
 | `R` | reset current scene |
 | `W` (hold) | wind gust |
+| `M` | toggle stitch view / wire view |
 | `L` | toggle structural cross-links |
 | `N` | toggle stitch nodes |
 
@@ -87,14 +88,21 @@ Position Based Dynamics**:
   outward from their centroid each solve, and the yarn tension balances it, so a
   sealed amigurumi inflates to a plump equilibrium.
 
-The renderer draws each yarn segment as a cylinder with rounded joints, and the
-inter-row bonds as thin posts, so rows read as continuous crochet. Lighting runs
-on the **GPU**: unit cylinder/sphere meshes are drawn through a GLSL material
-that does per-fragment diffuse + specular shading, with the material **sheen**
-as a uniform, so matte wool and glossy silk look different. Strands can carry a
-**stripe** palette for self-striping colourwork. (If the shader can't compile on
-a limited driver, the renderer falls back to flat cylinders so the demo still
-runs.)
+By default the renderer draws **faked stitch geometry**: each stitch becomes a
+small bowed "V" — the shape a knit/crochet stitch's top loops make — sized from
+the stitch gauge and oriented by the *live* fabric surface (its neighbours give
+the row and column directions; their cross product is the outward normal the V
+bows along). Rows of these Vs interlock into recognisable stockinette-like
+fabric that deforms with the simulation. It's purely cosmetic — the physics
+still sees one particle per stitch. Press `M` to switch to the **wire view**,
+which shows the raw yarn paths and structural links instead.
+
+Lighting runs on the **GPU**: unit cylinder/sphere meshes are drawn through a
+GLSL material that does per-fragment diffuse + specular shading, with the
+material **sheen** as a uniform, so matte wool and glossy silk look different.
+Stitches carry a **stripe** palette for self-striping colourwork. (If the shader
+can't compile on a limited driver, the renderer falls back to flat cylinders so
+the demo still runs.)
 
 ## How a crochet piece is built
 
