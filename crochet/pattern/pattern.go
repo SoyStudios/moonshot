@@ -9,10 +9,11 @@
 //     in the previous row/round (rendered thin) — this is what turns a 1-D
 //     strand into 2-D fabric that drapes.
 //
-// The builders here produce the three shapes most crochet starts from: a flat
-// swatch, a worked-in-the-round tube, and a flat increasing disc (the
-// amigurumi base). All of them hand back a Fabric referencing the shared
-// physics world, ready to simulate and render.
+// The builders here produce the shapes most crochet starts from: a flat swatch,
+// a worked-in-the-round tube, a flat increasing disc (the amigurumi base), and
+// a general surface of revolution driven by per-round stitch counts (spheres,
+// cones, teardrops — the amigurumi vocabulary). All of them hand back a Fabric
+// referencing the shared physics world, ready to simulate and render.
 package pattern
 
 import (
@@ -26,12 +27,48 @@ import (
 // Fabric is a materialised crochet piece: the yarn paths and cross-links that
 // live inside World, plus the nodes that were pinned.
 type Fabric struct {
-	World   *physics.World
-	Strands []*yarn.Strand // thick yarn paths (rows / rounds)
-	Links   [][2]int       // thin structural cross-links between rows
-	Pins    []int          // pinned particle indices
-	Radius  float64        // yarn radius (used to render Links)
-	Color   yarn.Color
+	World    *physics.World
+	Strands  []*yarn.Strand // thick yarn paths (rows / rounds)
+	Links    [][2]int       // thin structural cross-links between rows
+	Pins     []int          // pinned particle indices
+	Nodes    []int          // every particle this fabric created
+	Radius   float64        // yarn radius (used to render Links)
+	Color    yarn.Color
+	Material yarn.Material
+}
+
+// newFabric starts a fabric from a yarn config.
+func newFabric(w *physics.World, cfg yarn.Config) *Fabric {
+	mat := cfg.Material
+	if mat == (yarn.Material{}) {
+		mat = yarn.DefaultMaterial()
+	}
+	return &Fabric{World: w, Radius: cfg.Radius, Color: cfg.Color, Material: mat}
+}
+
+// add creates a particle, records it as part of the fabric, and returns its index.
+func (f *Fabric) add(pos math3.Vec3, mass float64) int {
+	i := f.World.Add(pos, mass)
+	f.Nodes = append(f.Nodes, i)
+	return i
+}
+
+// Particles returns the physics particles this fabric owns — the target for a
+// stuffing constraint, mass tweaks, etc.
+func (f *Fabric) Particles() []*physics.Particle {
+	out := make([]*physics.Particle, len(f.Nodes))
+	for i, n := range f.Nodes {
+		out[i] = f.World.Particles[n]
+	}
+	return out
+}
+
+// Stuff adds a stuffing (internal pressure) constraint over the whole fabric
+// and returns it, so a closed shape inflates like a stuffed amigurumi.
+func (f *Fabric) Stuff(strength float64) *physics.PressureConstraint {
+	c := physics.NewPressure(f.Particles(), strength)
+	f.World.AddConstraint(c)
+	return c
 }
 
 // PinMode selects which nodes of a swatch are pinned in place.
@@ -49,7 +86,7 @@ type SwatchConfig struct {
 	Rows, Cols int        // stitch counts
 	Origin     math3.Vec3 // position of stitch (0,0)
 	U, V       math3.Vec3 // per-column and per-row step directions (world units)
-	Stitch     Stitch     // stitch type (sets the effective row height via V)
+	Stitch     Stitch     // stitch type (documented gauge; see Def)
 	Pin        PinMode
 	Yarn       yarn.Config
 }
@@ -64,9 +101,8 @@ func Swatch(w *physics.World, cfg SwatchConfig) *Fabric {
 	if cfg.Cols < 1 {
 		cfg.Cols = 1
 	}
-	f := &Fabric{World: w, Radius: cfg.Yarn.Radius, Color: cfg.Yarn.Color}
+	f := newFabric(w, cfg.Yarn)
 
-	// Lay out the grid of particles.
 	grid := make([][]int, cfg.Rows)
 	for r := 0; r < cfg.Rows; r++ {
 		grid[r] = make([]int, cfg.Cols)
@@ -74,7 +110,7 @@ func Swatch(w *physics.World, cfg SwatchConfig) *Fabric {
 			pos := cfg.Origin.
 				Add(cfg.U.Scale(float64(c))).
 				Add(cfg.V.Scale(float64(r)))
-			grid[r][c] = w.Add(pos, cfg.Yarn.SegmentMass)
+			grid[r][c] = f.add(pos, cfg.Yarn.SegmentMass)
 		}
 	}
 
@@ -91,7 +127,7 @@ func Swatch(w *physics.World, cfg SwatchConfig) *Fabric {
 			}
 		}
 	}
-	path.Connect(w, cfg.Yarn) // structural + bending along the path
+	path.Connect(w, cfg.Yarn)
 	f.Strands = append(f.Strands, path)
 
 	// Bond each stitch to the one below it (the "work into the previous row").
@@ -128,10 +164,10 @@ func Tube(w *physics.World, cfg TubeConfig) *Fabric {
 	if cfg.Stitches < 3 {
 		cfg.Stitches = 3
 	}
-	f := &Fabric{World: w, Radius: cfg.Yarn.Radius, Color: cfg.Yarn.Color}
+	f := newFabric(w, cfg.Yarn)
 
 	grid := make([][]int, cfg.Rounds)
-	twist := (2 * math.Pi / float64(cfg.Stitches)) // one stitch of spiral per round
+	twist := 2 * math.Pi / float64(cfg.Stitches)
 	for r := 0; r < cfg.Rounds; r++ {
 		grid[r] = make([]int, cfg.Stitches)
 		for i := 0; i < cfg.Stitches; i++ {
@@ -141,22 +177,15 @@ func Tube(w *physics.World, cfg TubeConfig) *Fabric {
 				cfg.RiseY*float64(r),
 				cfg.Radius*math.Sin(a),
 			))
-			grid[r][i] = w.Add(pos, cfg.Yarn.SegmentMass)
+			grid[r][i] = f.add(pos, cfg.Yarn.SegmentMass)
 		}
 	}
 
-	// Each round is a closed loop of yarn.
 	for r := 0; r < cfg.Rounds; r++ {
-		ring := yarn.New(cfg.Yarn)
-		for i := 0; i < cfg.Stitches; i++ {
-			ring.Append(grid[r][i])
-		}
-		ring.Append(grid[r][0]) // close the loop
-		ring.Connect(w, cfg.Yarn)
+		ring := ringStrand(w, grid[r], cfg.Yarn)
+		bandRound(ring, cfg.Yarn, r)
 		f.Strands = append(f.Strands, ring)
 	}
-
-	// Bond rounds vertically.
 	for r := 1; r < cfg.Rounds; r++ {
 		for i := 0; i < cfg.Stitches; i++ {
 			w.Link(grid[r-1][i], grid[r][i], cfg.Yarn.Stiffness)
@@ -173,12 +202,12 @@ func Tube(w *physics.World, cfg TubeConfig) *Fabric {
 // DiscConfig describes a flat disc worked in the round with increases each
 // round — the classic amigurumi / granny-circle base.
 type DiscConfig struct {
-	Rounds      int        // number of rounds (excluding the centre)
-	StartStitch int        // stitches in the first round (e.g. 6)
-	Increase    int        // stitches added each subsequent round (e.g. 6)
-	RingSpacing float64    // radial distance between rounds
-	Center      math3.Vec3 // disc centre (in the XZ plane by default)
-	PinCenter   bool       // pin the middle so the disc can drape from it
+	Rounds      int
+	StartStitch int
+	Increase    int
+	RingSpacing float64
+	Center      math3.Vec3
+	PinCenter   bool
 	Yarn        yarn.Config
 }
 
@@ -191,9 +220,9 @@ func Disc(w *physics.World, cfg DiscConfig) *Fabric {
 	if cfg.StartStitch < 3 {
 		cfg.StartStitch = 3
 	}
-	f := &Fabric{World: w, Radius: cfg.Yarn.Radius, Color: cfg.Yarn.Color}
+	f := newFabric(w, cfg.Yarn)
 
-	center := w.Add(cfg.Center, cfg.Yarn.SegmentMass)
+	center := f.add(cfg.Center, cfg.Yarn.SegmentMass)
 	rings := make([][]int, cfg.Rounds)
 	for r := 0; r < cfg.Rounds; r++ {
 		n := cfg.StartStitch + cfg.Increase*r
@@ -202,41 +231,197 @@ func Disc(w *physics.World, cfg DiscConfig) *Fabric {
 		for i := 0; i < n; i++ {
 			a := 2 * math.Pi * float64(i) / float64(n)
 			pos := cfg.Center.Add(math3.V(radius*math.Cos(a), 0, radius*math.Sin(a)))
-			rings[r][i] = w.Add(pos, cfg.Yarn.SegmentMass)
+			rings[r][i] = f.add(pos, cfg.Yarn.SegmentMass)
 		}
-
-		// The ring itself is a closed yarn loop.
-		ring := yarn.New(cfg.Yarn)
-		for i := 0; i < n; i++ {
-			ring.Append(rings[r][i])
-		}
-		ring.Append(rings[r][0])
-		ring.Connect(w, cfg.Yarn)
+		ring := ringStrand(w, rings[r], cfg.Yarn)
+		bandRound(ring, cfg.Yarn, r)
 		f.Strands = append(f.Strands, ring)
 	}
 
-	// Radial bonds: every stitch links to the nearest stitch one ring inward
-	// (or the centre for the first ring).
 	for r := 0; r < cfg.Rounds; r++ {
-		n := len(rings[r])
-		for i := 0; i < n; i++ {
-			var inner int
-			if r == 0 {
-				inner = center
-			} else {
-				m := len(rings[r-1])
-				j := int(math.Round(float64(i) / float64(n) * float64(m)))
-				inner = rings[r-1][j%m]
-			}
-			w.Link(inner, rings[r][i], cfg.Yarn.Stiffness)
-			f.Links = append(f.Links, [2]int{inner, rings[r][i]})
-		}
+		linkToInner(f, rings[r], innerRing(rings, r, center), cfg.Yarn.Stiffness)
 	}
 
 	if cfg.PinCenter {
 		f.applyPins([]int{center})
 	}
 	return f
+}
+
+// RevolveConfig describes a surface of revolution built from a sequence of
+// per-round stitch counts — the way amigurumi is actually written ("6, 12, 18,
+// … , 12, 6"). Each round's circumference follows its stitch count, so
+// increases bulge the shape out and decreases pull it in; the radius/rise are
+// derived so the slant between rounds matches the stitch height. Feed it a
+// bell curve of counts to get a ball, a ramp to get a cone.
+type RevolveConfig struct {
+	Counts      []int      // stitches per round, bottom → top
+	Stitch      Stitch     // sets the gauge (width & height)
+	Gauge       float64    // world units per stitch unit
+	Center      math3.Vec3 // position of the bottom pole
+	CloseBottom bool       // cinch the first round to a pole node (magic ring)
+	CloseTop    bool       // cinch the last round to a pole node
+	PinTop      bool       // pin the top pole / last round (hang it)
+	Yarn        yarn.Config
+}
+
+// Revolve builds the surface described by RevolveConfig. Rings are stacked
+// along +Y; each stitch bonds to the nearest stitch in the ring below, and
+// optional pole nodes close the ends so a stuffing constraint can pressurise a
+// sealed shape.
+func Revolve(w *physics.World, cfg RevolveConfig) *Fabric {
+	f := newFabric(w, cfg.Yarn)
+	if len(cfg.Counts) == 0 {
+		return f
+	}
+	if cfg.Gauge <= 0 {
+		cfg.Gauge = 0.5
+	}
+	def := cfg.Stitch.Def()
+	width := cfg.Gauge * def.Width
+	rowH := cfg.Gauge * def.Height
+
+	// Radius of each round from its circumference, and the stacked Y so the
+	// slant distance between successive rings equals the row height.
+	nr := len(cfg.Counts)
+	radius := make([]float64, nr)
+	y := make([]float64, nr)
+	for r := 0; r < nr; r++ {
+		n := cfg.Counts[r]
+		if n < 1 {
+			n = 1
+		}
+		radius[r] = float64(n) * width / (2 * math.Pi)
+		if r > 0 {
+			dr := radius[r] - radius[r-1]
+			// Guarantee some vertical progress even on a big increase/decrease.
+			dy := math.Sqrt(math.Max(rowH*rowH-dr*dr, 0.04*rowH*rowH))
+			y[r] = y[r-1] + dy
+		}
+	}
+
+	rings := make([][]int, nr)
+	twist := width / (2 * math.Pi) // slight spiral per round
+	for r := 0; r < nr; r++ {
+		n := cfg.Counts[r]
+		rings[r] = make([]int, n)
+		for i := 0; i < n; i++ {
+			a := 2*math.Pi*float64(i)/float64(n) + twist*float64(r)
+			pos := cfg.Center.Add(math3.V(
+				radius[r]*math.Cos(a),
+				y[r],
+				radius[r]*math.Sin(a),
+			))
+			rings[r][i] = f.add(pos, cfg.Yarn.SegmentMass)
+		}
+		ring := ringStrand(w, rings[r], cfg.Yarn)
+		bandRound(ring, cfg.Yarn, r)
+		f.Strands = append(f.Strands, ring)
+	}
+
+	// Vertical bonds between successive rings (nearest stitch below).
+	for r := 1; r < nr; r++ {
+		linkToInner(f, rings[r], rings[r-1], cfg.Yarn.Stiffness)
+	}
+
+	var bottomPole, topPole = -1, -1
+	if cfg.CloseBottom {
+		bottomPole = f.add(cfg.Center.Add(math3.V(0, y[0]-rowH*0.5, 0)), cfg.Yarn.SegmentMass)
+		for _, n := range rings[0] {
+			w.Link(bottomPole, n, cfg.Yarn.Stiffness)
+			f.Links = append(f.Links, [2]int{bottomPole, n})
+		}
+	}
+	if cfg.CloseTop {
+		topPole = f.add(cfg.Center.Add(math3.V(0, y[nr-1]+rowH*0.5, 0)), cfg.Yarn.SegmentMass)
+		for _, n := range rings[nr-1] {
+			w.Link(topPole, n, cfg.Yarn.Stiffness)
+			f.Links = append(f.Links, [2]int{topPole, n})
+		}
+	}
+
+	if cfg.PinTop {
+		if topPole >= 0 {
+			f.applyPins([]int{topPole})
+		} else {
+			f.applyPins(rings[nr-1])
+		}
+	}
+	return f
+}
+
+// SphereCounts builds the classic amigurumi round counts for a ball: increase
+// by `step` each round up to `rounds` rounds of increases, hold, then mirror
+// back down. The peak count is rounds*step.
+func SphereCounts(rounds, step int) []int {
+	if rounds < 1 {
+		rounds = 1
+	}
+	if step < 1 {
+		step = 1
+	}
+	up := make([]int, rounds)
+	for r := 0; r < rounds; r++ {
+		up[r] = step * (r + 1)
+	}
+	// up = step, 2step, ..., rounds*step ; mirror for the decreases.
+	counts := append([]int{}, up...)
+	for r := rounds - 2; r >= 0; r-- {
+		counts = append(counts, up[r])
+	}
+	return counts
+}
+
+// --- shared helpers ---
+
+// ringStrand creates a closed loop strand over the given node ring and wires
+// its constraints.
+func ringStrand(w *physics.World, ring []int, cfg yarn.Config) *yarn.Strand {
+	s := yarn.New(cfg)
+	for _, n := range ring {
+		s.Append(n)
+	}
+	if len(ring) > 0 {
+		s.Append(ring[0]) // close the loop
+	}
+	s.Connect(w, cfg)
+	return s
+}
+
+// bandRound recolours a round's strand to a solid stripe colour when the yarn
+// config defines a stripe palette — giving worked-in-the-round pieces clean
+// horizontal colour bands, StripeWidth rounds tall.
+func bandRound(s *yarn.Strand, cfg yarn.Config, round int) {
+	if len(cfg.Stripe) == 0 {
+		return
+	}
+	band := cfg.StripeWidth
+	if band < 1 {
+		band = 1
+	}
+	s.Recolor(cfg.Stripe[(round/band)%len(cfg.Stripe)])
+}
+
+// innerRing returns the ring immediately inside r, or a single-element ring of
+// the centre node for r == 0.
+func innerRing(rings [][]int, r, center int) []int {
+	if r == 0 {
+		return []int{center}
+	}
+	return rings[r-1]
+}
+
+// linkToInner bonds every stitch of `outer` to the nearest stitch of `inner`.
+func linkToInner(f *Fabric, outer, inner []int, stiffness float64) {
+	n, m := len(outer), len(inner)
+	if n == 0 || m == 0 {
+		return
+	}
+	for i := 0; i < n; i++ {
+		j := int(math.Round(float64(i)/float64(n)*float64(m))) % m
+		f.World.Link(inner[j], outer[i], stiffness)
+		f.Links = append(f.Links, [2]int{inner[j], outer[i]})
+	}
 }
 
 // applyPins pins the given particle indices and records them.

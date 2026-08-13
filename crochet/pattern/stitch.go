@@ -1,9 +1,10 @@
 package pattern
 
-// Stitch enumerates the basic crochet stitches. In this engine a stitch is
-// primarily a *height*: taller stitches produce taller rows, which is what
-// determines the spacing of the physics mesh. The names follow standard
-// (US) crochet terminology.
+// Stitch enumerates the basic crochet stitches. Each stitch carries a physical
+// "gauge": how wide it sits and how tall it stands, in stitch units where a
+// single crochet is 1×1. Taller stitches (dc, tr) make taller rows; that gauge
+// drives the spacing of the physics mesh the builders create. Names follow
+// standard US crochet terminology.
 type Stitch int
 
 const (
@@ -15,44 +16,38 @@ const (
 	Treble                   // tr  — treble/triple crochet
 )
 
-// Height returns the relative row height of the stitch, in "stitch units".
-// A single crochet is the reference at 1.0. These ratios approximate how much
-// taller each stitch stands than a single crochet.
-func (s Stitch) Height() float64 {
+// Def describes the gauge and appearance of a stitch.
+type Def struct {
+	Abbr   string
+	Width  float64 // horizontal footprint in stitch units
+	Height float64 // row height in stitch units
+}
+
+// Def returns the stitch's gauge definition.
+func (s Stitch) Def() Def {
 	switch s {
-	case Slip:
-		return 0.4
-	case Single:
-		return 1.0
-	case HalfDouble:
-		return 1.5
-	case Double:
-		return 2.0
-	case Treble:
-		return 3.0
 	case Chain:
-		return 0.6
+		return Def{"ch", 0.9, 0.6}
+	case Slip:
+		return Def{"sl st", 1.0, 0.4}
+	case Single:
+		return Def{"sc", 1.0, 1.0}
+	case HalfDouble:
+		return Def{"hdc", 1.05, 1.5}
+	case Double:
+		return Def{"dc", 1.1, 2.0}
+	case Treble:
+		return Def{"tr", 1.15, 3.0}
 	default:
-		return 1.0
+		return Def{"sc", 1.0, 1.0}
 	}
 }
 
+// Height returns the relative row height of the stitch (single crochet = 1.0).
+func (s Stitch) Height() float64 { return s.Def().Height }
+
+// Width returns the relative horizontal footprint of the stitch.
+func (s Stitch) Width() float64 { return s.Def().Width }
+
 // String returns the standard abbreviation.
-func (s Stitch) String() string {
-	switch s {
-	case Chain:
-		return "ch"
-	case Slip:
-		return "sl st"
-	case Single:
-		return "sc"
-	case HalfDouble:
-		return "hdc"
-	case Double:
-		return "dc"
-	case Treble:
-		return "tr"
-	default:
-		return "?"
-	}
-}
+func (s Stitch) String() string { return s.Def().Abbr }

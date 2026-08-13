@@ -81,6 +81,89 @@ func TestFabricStaysFinite(t *testing.T) {
 	}
 }
 
+func TestSphereCountsIsSymmetricBell(t *testing.T) {
+	c := SphereCounts(3, 6) // 6,12,18,12,6
+	want := []int{6, 12, 18, 12, 6}
+	if len(c) != len(want) {
+		t.Fatalf("counts len = %d, want %d (%v)", len(c), len(want), c)
+	}
+	for i := range want {
+		if c[i] != want[i] {
+			t.Fatalf("counts = %v, want %v", c, want)
+		}
+	}
+}
+
+func TestRevolveBuildsAndCloses(t *testing.T) {
+	w := physics.NewWorld()
+	counts := SphereCounts(4, 6) // 6,12,18,24,18,12,6
+	f := Revolve(w, RevolveConfig{
+		Counts:      counts,
+		Stitch:      Single,
+		Gauge:       0.5,
+		Center:      math3.V(0, 5, 0),
+		CloseBottom: true,
+		CloseTop:    true,
+		Yarn:        yarn.DefaultConfig(),
+	})
+
+	sum := 0
+	for _, n := range counts {
+		sum += n
+	}
+	// One particle per stitch, plus the two pole nodes.
+	if got := len(f.Nodes); got != sum+2 {
+		t.Fatalf("expected %d nodes, got %d", sum+2, got)
+	}
+	if len(w.Particles) != len(f.Nodes) {
+		t.Fatalf("fabric should own every particle in the world")
+	}
+}
+
+func TestStuffedBallStaysFiniteAndInflates(t *testing.T) {
+	w := physics.NewWorld()
+	w.Gravity = math3.Zero
+	w.SelfCollision = true
+	w.CollisionRadius = 0.18
+
+	f := Revolve(w, RevolveConfig{
+		Counts:      SphereCounts(4, 6),
+		Stitch:      Single,
+		Gauge:       0.5,
+		Center:      math3.V(0, 5, 0),
+		CloseBottom: true,
+		CloseTop:    true,
+		Yarn:        yarn.DefaultConfig(),
+	})
+	f.Stuff(0.004)
+
+	// Mean radius from the centroid before/after stuffing.
+	meanR := func() float64 {
+		var ctr math3.Vec3
+		for _, p := range f.Particles() {
+			ctr = ctr.Add(p.Pos)
+		}
+		ctr = ctr.Scale(1 / float64(len(f.Nodes)))
+		var s float64
+		for _, p := range f.Particles() {
+			s += p.Pos.Distance(ctr)
+		}
+		return s / float64(len(f.Nodes))
+	}
+	before := meanR()
+	simulate(w, 400)
+	after := meanR()
+
+	for i, p := range w.Particles {
+		if !finite(p.Pos) {
+			t.Fatalf("stuffed ball particle %d non-finite: %+v", i, p.Pos)
+		}
+	}
+	if after <= before {
+		t.Fatalf("stuffing did not inflate the ball: before=%.3f after=%.3f", before, after)
+	}
+}
+
 // A hanging swatch should settle: the average speed of its free nodes drops
 // close to zero once the yarn stops swinging.
 func TestSwatchSettles(t *testing.T) {

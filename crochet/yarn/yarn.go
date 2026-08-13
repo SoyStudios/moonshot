@@ -1,10 +1,10 @@
 // Package yarn models a physical strand of yarn on top of the physics solver.
 //
 // A Strand is an ordered list of particle indices (its "nodes") that share a
-// radius and colour. Consecutive nodes are joined by distance constraints (the
-// yarn's inextensibility) and, optionally, weaker "skip-one" constraints that
-// resist sharp folding (bending stiffness). This is the primitive the crochet
-// pattern layer stitches together into fabric.
+// radius, colour and material. Consecutive nodes are joined by distance
+// constraints (the yarn's inextensibility) and, optionally, weaker "skip-one"
+// constraints that resist sharp folding (bending stiffness). This is the
+// primitive the crochet pattern layer stitches together into fabric.
 package yarn
 
 import (
@@ -16,13 +16,32 @@ import (
 // yarn/pattern layers stay headless-testable. The engine maps it to raylib.
 type Color struct{ R, G, B, A uint8 }
 
-// Config controls how a strand is materialised into the physics world.
+// Material describes how a strand catches light. It is interpreted by the
+// renderer's cheap CPU lighting: matte wool has low sheen, mercerised cotton or
+// acrylic has high sheen. Ambient sets how much the yarn is lit in shadow.
+type Material struct {
+	Sheen   float64 // 0 = matte, 1 = glossy specular highlight
+	Ambient float64 // base brightness in shadow, 0..1
+}
+
+// DefaultMaterial is a soft, mostly-matte wool.
+func DefaultMaterial() Material { return Material{Sheen: 0.12, Ambient: 0.35} }
+
+// Config controls how a strand is materialised into the physics world and how
+// it looks.
 type Config struct {
 	SegmentMass float64 // mass per node
 	Stiffness   float64 // structural stiffness in [0,1]
 	Bending     float64 // skip-one stiffness in [0,1]; 0 disables bending
 	Radius      float64 // render thickness
 	Color       Color
+	Material    Material
+
+	// Stripe, when non-empty, colours the yarn in bands of StripeWidth
+	// segments cycling through these colours (self-striping yarn / colourwork).
+	// Color is used when Stripe is empty.
+	Stripe      []Color
+	StripeWidth int
 }
 
 // DefaultConfig returns reasonable yarn parameters.
@@ -33,24 +52,38 @@ func DefaultConfig() Config {
 		Bending:     0.15,
 		Radius:      0.06,
 		Color:       Color{220, 120, 80, 255},
+		Material:    DefaultMaterial(),
 	}
 }
 
 // Strand is a continuous piece of yarn threaded through world particles.
 type Strand struct {
-	Nodes  []int
-	Radius float64
-	Color  Color
+	Nodes    []int
+	Radius   float64
+	Color    Color
+	Material Material
+
+	stripe      []Color
+	stripeWidth int
 }
 
 // New creates an (initially empty) strand with the given appearance.
 func New(cfg Config) *Strand {
-	return &Strand{Radius: cfg.Radius, Color: cfg.Color}
+	mat := cfg.Material
+	if mat == (Material{}) {
+		mat = DefaultMaterial()
+	}
+	return &Strand{
+		Radius:      cfg.Radius,
+		Color:       cfg.Color,
+		Material:    mat,
+		stripe:      cfg.Stripe,
+		stripeWidth: cfg.StripeWidth,
+	}
 }
 
 // Line samples a straight run of yarn between a and b into segments+1 nodes,
 // wiring up the structural and bending constraints, and returns the strand.
-// The first and/or last node can be pinned to hang the yarn.
 func Line(w *physics.World, a, b math3.Vec3, segments int, cfg Config) *Strand {
 	s := New(cfg)
 	for i := 0; i <= segments; i++ {
@@ -87,4 +120,24 @@ func (s *Strand) Segments() [][2]int {
 		out = append(out, [2]int{s.Nodes[i], s.Nodes[i+1]})
 	}
 	return out
+}
+
+// Recolor sets a single solid colour for the whole strand, clearing any stripe
+// pattern. Used to band a piece made of per-round strands (e.g. a hat) where
+// each round should be one colour.
+func (s *Strand) Recolor(c Color) {
+	s.Color = c
+	s.stripe = nil
+}
+
+// SegColor returns the colour of segment i, honouring the stripe pattern.
+func (s *Strand) SegColor(i int) Color {
+	if len(s.stripe) == 0 {
+		return s.Color
+	}
+	w := s.stripeWidth
+	if w < 1 {
+		w = 1
+	}
+	return s.stripe[(i/w)%len(s.stripe)]
 }

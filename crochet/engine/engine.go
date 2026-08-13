@@ -194,29 +194,31 @@ func (e *Engine) draw() {
 
 func (e *Engine) drawFabric(f *pattern.Fabric) {
 	w := f.World
-	col := rl.NewColor(f.Color.R, f.Color.G, f.Color.B, f.Color.A)
+	cam := e.orbit.position()
 	radius := float32(f.Radius)
 
-	// Thick yarn paths, drawn as a chain of tapered cylinders with rounded
-	// joints so rows read as continuous yarn.
+	// Thick yarn paths, drawn as a chain of cylinders with rounded joints so
+	// rows read as continuous yarn. Each segment is CPU-shaded and may carry a
+	// stripe colour.
 	for _, s := range f.Strands {
-		sc := rl.NewColor(s.Color.R, s.Color.G, s.Color.B, s.Color.A)
 		r := float32(s.Radius)
-		for _, seg := range s.Segments() {
-			a := v(w.Particles[seg[0]].Pos)
-			b := v(w.Particles[seg[1]].Pos)
-			rl.DrawCylinderEx(a, b, r, r, 8, sc)
+		for i, seg := range s.Segments() {
+			pa := w.Particles[seg[0]].Pos
+			pb := w.Particles[seg[1]].Pos
+			col := shadeSegment(s.SegColor(i), s.Material, pa, pb, cam)
+			rl.DrawCylinderEx(v(pa), v(pb), r, r, 8, col)
 		}
 		if e.showNodes {
-			for _, n := range s.Nodes {
-				rl.DrawSphere(v(w.Particles[n].Pos), r, sc)
+			for i, n := range s.Nodes {
+				col := shadePoint(s.SegColor(i), s.Material)
+				rl.DrawSphere(v(w.Particles[n].Pos), r, col)
 			}
 		}
 	}
 
 	// Thin structural cross-links between rows.
 	if e.showLinks {
-		lc := scaleColor(col, 0.6)
+		lc := shadePoint(darker(f.Color, 0.6), f.Material)
 		lr := radius * 0.4
 		for _, l := range f.Links {
 			a := v(w.Particles[l[0]].Pos)
@@ -265,15 +267,6 @@ func (e *Engine) drawHUD() {
 // v converts a simulation vector to a raylib (float32) vector.
 func v(p math3.Vec3) rl.Vector3 {
 	return rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-}
-
-func scaleColor(c rl.Color, f float32) rl.Color {
-	return rl.NewColor(
-		uint8(float32(c.R)*f),
-		uint8(float32(c.G)*f),
-		uint8(float32(c.B)*f),
-		c.A,
-	)
 }
 
 // sceneCenter estimates the centroid of all particles so the camera can frame

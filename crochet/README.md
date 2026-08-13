@@ -20,8 +20,10 @@ A window opens with several crochet pieces you can cycle through:
 | Scene | What it shows |
 |-------|---------------|
 | Hanging swatch | a flat sampler pinned along its top edge, hanging and swaying |
-| Draped swatch | a sheet of crochet dropping over a spherical form and folding |
-| Beanie tube | crochet worked in the round into a cylinder, pinned at the crown |
+| Draped swatch | a sheet dropping over a spherical form and folding, with self-collision |
+| Stuffed ball | an amigurumi ball sealed at both poles, inflated by internal stuffing |
+| Striped beanie | a hat worked in the round with self-striping colourwork |
+| Materials | two identical swatches — matte wool vs glossy silk — under the same light |
 | Amigurumi disc | a magic-ring circle with increases that ruffles into a bowl |
 
 ### Controls
@@ -77,9 +79,19 @@ Position Based Dynamics**:
   collisions over several iterations — more iterations means stiffer, less
   stretchy yarn. A ground plane (with friction) and sphere colliders let fabric
   drape over forms.
+- **Self-collision** treats each particle as a small sphere and pushes
+  overlapping, non-adjacent parts apart, so folded fabric doesn't pass through
+  itself. A uniform spatial hash keeps it near-linear, and directly-linked
+  stitches are skipped so collision never fights the yarn.
+- **Stuffing** is a `PressureConstraint`: it pushes a closed shape's particles
+  outward from their centroid each solve, and the yarn tension balances it, so a
+  sealed amigurumi inflates to a plump equilibrium.
 
-The renderer draws each yarn segment as a tapered cylinder with rounded joints,
-and the inter-row bonds as thin posts, so rows read as continuous crochet.
+The renderer draws each yarn segment as a cylinder with rounded joints, and the
+inter-row bonds as thin posts, so rows read as continuous crochet. Segments are
+shaded on the CPU with a directional light plus a material **sheen**, so matte
+wool and glossy silk look different, and strands can carry a **stripe** palette
+for self-striping colourwork.
 
 ## How a crochet piece is built
 
@@ -87,20 +99,35 @@ A `pattern` builder lays out one particle per stitch, threads a continuous yarn
 path through them (boustrophedon for flat rows, closed loops for rounds), and
 adds cross-links between each stitch and the stitch it was "worked into" in the
 previous row. That single idea — a stitch grid bonded by yarn — produces
-swatches, tubes and increasing discs, and is the foundation for richer stitch
-types and patterns later.
+swatches, tubes and increasing discs.
+
+`Revolve` generalises it: hand it a sequence of per-round **stitch counts** (the
+way amigurumi is actually written — `6, 12, 18, … , 12, 6`) and it lays out a
+surface of revolution. Each round's circumference follows its count, so
+increases bulge the shape out and decreases pull it in; the radius and rise are
+derived so the slant between rounds matches the stitch height. `SphereCounts`
+generates the bell-curve counts for a ball; feed a ramp for a cone. `CloseTop`
+/`CloseBottom` cinch the poles so a `Stuff` pressure constraint can inflate a
+sealed shape.
+
+Each `pattern.Stitch` carries a **gauge** (`Def{Width, Height}`) for
+`sc`/`hdc`/`dc`/`tr`, so taller stitches make taller rows.
 
 ## Extending
 
-- New shapes: add a builder to `pattern` returning a `*Fabric`.
-- New stitches: `pattern.Stitch` already carries relative heights (`sc`, `hdc`,
-  `dc`, `tr`, …); use them to vary row spacing.
-- New physics: implement `physics.Constraint` (e.g. shear or volume
-  constraints) and add it to the world.
+- New shapes: add a builder to `pattern` returning a `*Fabric`, or drive
+  `Revolve` with a new count sequence.
+- New stitches: extend `pattern.Stitch` / its `Def` gauge.
+- New physics: implement `physics.Constraint` (like the pressure/stuffing
+  constraint) and add it to the world.
+- New looks: set a `yarn.Material` (sheen/ambient) or a `Stripe` palette on the
+  yarn config.
 
 ## Status
 
-Early but functional: the yarn solver, three crochet builders, a 3-D viewer and
-a headless test suite all work. Next steps worth exploring are self-collision
-between stitches (so fabric doesn't pass through itself), stuffing pressure for
-amigurumi, and reading real written patterns.
+Functional and growing: the yarn solver (with self-collision and stuffing
+pressure), stitch-gauge-aware builders (swatch, tube, disc, and the
+count-driven `Revolve`), CPU-shaded material/colourwork rendering, a 3-D viewer
+and a headless test suite all work. Next steps worth exploring are proper stitch
+posts (subdividing tall stitches into flexible legs), reading written patterns
+from text, and increase/decrease placement for sculpted amigurumi.

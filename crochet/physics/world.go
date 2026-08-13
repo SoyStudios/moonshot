@@ -31,6 +31,13 @@ type World struct {
 	Friction float64
 
 	Spheres []Sphere
+
+	// SelfCollision, when enabled, stops the fabric from passing through
+	// itself by treating each particle as a sphere of CollisionRadius. Keep
+	// CollisionRadius below the stitch spacing so neighbouring stitches don't
+	// fight the yarn (directly linked particles are skipped regardless).
+	SelfCollision   bool
+	CollisionRadius float64
 }
 
 // NewWorld returns a world with sensible defaults for yarn simulation.
@@ -86,6 +93,9 @@ func (w *World) Step(dt float64) {
 		}
 		w.collide()
 	}
+	// Self-collision is resolved once per step (after the yarn has relaxed) to
+	// keep the spatial hash rebuild off the hot per-iteration path.
+	w.selfCollide()
 }
 
 func (w *World) integrate(dt float64) {
