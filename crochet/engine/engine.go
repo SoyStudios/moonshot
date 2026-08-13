@@ -40,6 +40,9 @@ type Config struct {
 	// CamDistance, when > 0, sets the initial camera orbit distance (otherwise
 	// a default is used). Useful for framing previews / exercising LOD.
 	CamDistance float64
+
+	// Fuzz enables the fibre halo (default on). Turn it off for a cheaper draw.
+	Fuzz bool
 }
 
 // DefaultConfig returns a reasonable window/loop configuration.
@@ -51,6 +54,7 @@ func DefaultConfig() Config {
 		FixedDT:     1.0 / 120,
 		MaxSubsteps: 8,
 		TargetFPS:   60,
+		Fuzz:        true,
 	}
 }
 
@@ -126,6 +130,7 @@ func (e *Engine) Run() {
 	e.orbit.apply(&e.cam)
 
 	e.renderer = newYarnRenderer()
+	e.renderer.fuzz = e.cfg.Fuzz
 	defer e.renderer.unload()
 
 	frame := 0

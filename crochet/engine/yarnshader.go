@@ -26,18 +26,22 @@ import (
 // If the shader fails to compile (rare, on a limited driver) the renderer falls
 // back to raylib's flat immediate-mode cylinders so the demo still runs.
 
-// The vertex shader also derives, per fragment, where on the tube the fragment
-// sits: the angle around it and the distance along it. Those feed a helical
-// "ply" phase so the fragment shader can carve the twisted-fibre look of yarn.
+// The fibre detail (fuzz, colour variation) is sampled from a small baked noise
+// texture (bound through the material's normal-map slot as texture2) rather than
+// computed per fragment, which is far cheaper. A per-instance UV offset keeps
+// the tiling from repeating visibly across segments. The helical "ply" phase
+// stays analytic — it's only a couple of trig ops.
 const yarnVertexShader = `
 #version 330
 layout(location = 0) in vec3 vertexPosition;
+layout(location = 1) in vec2 vertexTexCoord;
 layout(location = 2) in vec3 vertexNormal;
 layout(location = 6) in mat4 instanceTransform;
 uniform mat4 mvp;
 out vec3 fragPosition;
 out vec3 fragNormal;
 out vec3 fragTangent;
+out vec2 fragUV;
 out float fragPhase;
 
 const float PLIES = 3.0;  // visible twisted strands around the yarn
@@ -49,17 +53,18 @@ void main() {
     fragPosition = world.xyz;
     fragNormal = normalize(transpose(inverse(m3))*vertexNormal);
 
-    // Around-tube tangent (object space) carried to world space.
     vec3 tanObj = normalize(vec3(-vertexPosition.z, 0.0, vertexPosition.x));
     fragTangent = normalize(m3*tanObj);
 
-    // Helical ply phase: angle around the tube + twist along its length,
-    // measured in radius units so the twist looks the same at any thickness.
     float radius = length(instanceTransform[0].xyz);
     float segLen = length(instanceTransform[1].xyz);
     float along = vertexPosition.y*segLen;
     float ang = atan(vertexPosition.z, vertexPosition.x);
     fragPhase = ang*PLIES + (along/max(radius, 1e-4))*TWIST;
+
+    // Per-instance UV jitter so the baked noise doesn't obviously tile.
+    float off = fract(sin(dot(instanceTransform[3].xyz, vec3(12.9, 78.2, 37.7)))*43758.5);
+    fragUV = vertexTexCoord + vec2(off, off*1.7);
 
     gl_Position = mvp*world;
 }
@@ -70,6 +75,7 @@ const yarnFragmentShader = `
 in vec3 fragPosition;
 in vec3 fragNormal;
 in vec3 fragTangent;
+in vec2 fragUV;
 in float fragPhase;
 uniform vec4 colDiffuse;   // per-group yarn colour (raylib sets from material)
 uniform vec3 lightDir;     // direction toward the key light (normalized)
@@ -77,22 +83,8 @@ uniform vec3 lightColor;
 uniform float ambient;     // base brightness in shadow
 uniform float sheen;       // sheen strength (matte 0 .. glossy 1)
 uniform vec3 viewPos;
+uniform sampler2D texture2; // baked fibre noise (material normal-map slot)
 out vec4 finalColor;
-
-// Cheap coherent value noise for the fuzzy micro-surface.
-float hash(vec3 p) {
-    p = fract(p*vec3(0.1031, 0.1030, 0.0973));
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y)*p.z);
-}
-float vnoise(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
-    f = f*f*(3.0 - 2.0*f);
-    return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
-                   mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-                   mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
-}
 
 void main() {
     vec3 N = normalize(fragNormal);
@@ -104,28 +96,26 @@ void main() {
     float gc = cos(fragPhase);
     N = normalize(N + T*(gc*0.28));
 
-    // Fuzzy micro-roughness: jitter the normal with fine coherent noise so the
-    // surface scatters light like spun fibre instead of moulded plastic.
-    float nA = vnoise(fragPosition*38.0) - 0.5;
-    float nB = vnoise(fragPosition*38.0 + 19.3) - 0.5;
+    // Fuzzy micro-roughness from the baked noise texture (two lookups for two
+    // tangent directions), so the surface scatters light like spun fibre.
+    float nA = texture(texture2, fragUV*vec2(3.0, 1.6)).r - 0.5;
+    float nB = texture(texture2, fragUV*vec2(3.0, 1.6) + vec2(0.5, 0.27)).r - 0.5;
     N = normalize(N + (T*nA + B*nB)*0.6);
 
     vec3 L = normalize(lightDir);
     vec3 V = normalize(viewPos - fragPosition);
 
-    // Soft wrapped diffuse: fibres scatter light around the terminator, so the
-    // shading is matte with no hard shadow edge.
+    // Soft wrapped diffuse (matte, no hard shadow edge).
     float diff = clamp(dot(N, L)*0.5 + 0.5, 0.0, 1.0);
 
-    // Fabric sheen: a dim, broad highlight plus a faint grazing rim — never the
-    // tight hot spot of plastic.
+    // Fabric sheen: a dim, broad highlight plus a faint grazing rim.
     vec3 H = normalize(L + V);
     float broad = pow(max(dot(N, H), 0.0), 5.0);
     float rim = pow(1.0 - max(dot(normalize(fragNormal), V), 0.0), 3.0);
     float spec = (broad*0.10 + rim*0.12)*sheen;
 
-    float ao   = 0.82 + 0.18*(0.5 + 0.5*g);        // groove shadowing
-    float tint = 0.93 + 0.07*(nA + 0.5);           // subtle colour variation
+    float ao   = 0.82 + 0.18*(0.5 + 0.5*g);
+    float tint = 0.93 + 0.07*(nA + 0.5);
     vec3 lit = colDiffuse.rgb*tint*(ambient + (1.0 - ambient)*diff)*ao + spec*lightColor;
     finalColor = vec4(lit, colDiffuse.a);
 }
@@ -138,56 +128,45 @@ void main() {
 const haloVertexShader = `
 #version 330
 layout(location = 0) in vec3 vertexPosition;
+layout(location = 1) in vec2 vertexTexCoord;
 layout(location = 2) in vec3 vertexNormal;
 layout(location = 6) in mat4 instanceTransform;
 uniform mat4 mvp;
 uniform float shellOffset;   // push out along the normal (object units)
 uniform float shellFrac;     // 0..1 how far out this shell is
-out vec3 fragBase;           // un-expanded world pos, for stable fibre noise
 out vec3 fragNormal;
 out vec3 fragPosition;
+out vec2 fragUV;
 out float vFrac;
 void main() {
     mat3 m3 = mat3(instanceTransform);
     vec3 posExp = vertexPosition + vertexNormal*shellOffset;
     vec4 world = instanceTransform*vec4(posExp, 1.0);
-    fragBase = (instanceTransform*vec4(vertexPosition, 1.0)).xyz;
     fragNormal = normalize(transpose(inverse(m3))*vertexNormal);
     fragPosition = world.xyz;
     vFrac = shellFrac;
+    float off = fract(sin(dot(instanceTransform[3].xyz, vec3(12.9, 78.2, 37.7)))*43758.5);
+    fragUV = vertexTexCoord + vec2(off, off*1.7);
     gl_Position = mvp*world;
 }
 `
 
 const haloFragmentShader = `
 #version 330
-in vec3 fragBase;
 in vec3 fragNormal;
 in vec3 fragPosition;
+in vec2 fragUV;
 in float vFrac;
 uniform vec4 colDiffuse;
 uniform vec3 lightDir;
 uniform float ambient;
+uniform sampler2D texture2; // baked fibre noise (material normal-map slot)
 out vec4 finalColor;
-
-float hash(vec3 p) {
-    p = fract(p*vec3(0.1031, 0.1030, 0.0973));
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y)*p.z);
-}
-float vnoise(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
-    f = f*f*(3.0 - 2.0*f);
-    return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
-                   mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-                   mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
-}
 
 void main() {
     // A fibre reaches this shell only if its noise "length" clears the shell's
     // height; the threshold rises outward so tips thin to a sparse fuzz.
-    float n = vnoise(fragBase*46.0);
+    float n = texture(texture2, fragUV*vec2(4.0, 2.2)).r;
     if (n < 0.34 + vFrac*0.6) discard;
 
     vec3 N = normalize(fragNormal);
@@ -216,6 +195,7 @@ type yarnRenderer struct {
 	material rl.Material
 	cylinder rl.Mesh
 	sphere   rl.Mesh
+	noiseTex rl.Texture2D
 
 	locLightDir   int32
 	locLightColor int32
@@ -240,8 +220,8 @@ type yarnRenderer struct {
 // newYarnRenderer builds the GPU resources. Must be called after InitWindow.
 func newYarnRenderer() *yarnRenderer {
 	r := &yarnRenderer{
-		cylinder:   rl.GenMeshCylinder(1, 1, 12),
-		sphere:     rl.GenMeshSphere(1, 8, 12),
+		cylinder:   rl.GenMeshCylinder(1, 1, 8),
+		sphere:     rl.GenMeshSphere(1, 6, 10),
 		cylBatches: map[batchKey][]rl.Matrix{},
 		sphBatches: map[batchKey][]rl.Matrix{},
 	}
@@ -261,8 +241,17 @@ func newYarnRenderer() *yarnRenderer {
 	locs := unsafe.Slice(r.shader.Locs, 32)
 	locs[rl.ShaderLocMatrixModel] = rl.GetShaderLocationAttrib(r.shader, "instanceTransform")
 
+	// Bake the fibre noise once into a small tiling texture, sampled by the
+	// shaders instead of computed per fragment.
+	img := rl.GenImagePerlinNoise(256, 256, 0, 0, 9.0)
+	r.noiseTex = rl.LoadTextureFromImage(img)
+	rl.UnloadImage(img)
+	rl.SetTextureFilter(r.noiseTex, rl.FilterBilinear)
+	rl.SetTextureWrap(r.noiseTex, rl.WrapRepeat)
+
 	r.material = rl.LoadMaterialDefault()
 	r.material.Shader = r.shader
+	r.material.GetMap(rl.MapNormal).Texture = r.noiseTex
 
 	toLight := rl.Vector3Normalize(rl.NewVector3(0.45, 1.0, 0.35))
 	rl.SetShaderValue(r.shader, r.locLightDir, []float32{toLight.X, toLight.Y, toLight.Z}, rl.ShaderUniformVec3)
@@ -279,6 +268,7 @@ func newYarnRenderer() *yarnRenderer {
 	hlocs[rl.ShaderLocMatrixModel] = rl.GetShaderLocationAttrib(r.haloShader, "instanceTransform")
 	r.haloMaterial = rl.LoadMaterialDefault()
 	r.haloMaterial.Shader = r.haloShader
+	r.haloMaterial.GetMap(rl.MapNormal).Texture = r.noiseTex
 	rl.SetShaderValue(r.haloShader, r.hLightDir, []float32{toLight.X, toLight.Y, toLight.Z}, rl.ShaderUniformVec3)
 	return r
 }
@@ -323,11 +313,7 @@ func (r *yarnRenderer) node(pos rl.Vector3, radius float32, col yarn.Color) {
 		return
 	}
 	k := batchKey{col, r.curSheen, r.curAmbient}
-	tf := rl.MatrixMultiply(
-		rl.MatrixScale(radius, radius, radius),
-		rl.MatrixTranslate(pos.X, pos.Y, pos.Z),
-	)
-	r.sphBatches[k] = append(r.sphBatches[k], tf)
+	r.sphBatches[k] = append(r.sphBatches[k], sphereTransform(pos, radius))
 }
 
 // flush draws all queued geometry as a handful of instanced draw calls,
@@ -364,17 +350,15 @@ func (r *yarnRenderer) drawBatch(mesh rl.Mesh, k batchKey, mats []rl.Matrix) {
 func (r *yarnRenderer) drawHalo() {
 	rl.BeginBlendMode(rl.BlendAlpha)
 	rl.DisableDepthMask()
+	// Only the cylinders get a halo — they form the yarn's silhouette. Skipping
+	// the joint spheres roughly halves the fill the shells cost, for no visible
+	// difference (the cylinder fuzz already covers the joints).
 	for _, s := range haloShells {
 		rl.SetShaderValue(r.haloShader, r.hShellOffset, []float32{s.offset}, rl.ShaderUniformFloat)
 		rl.SetShaderValue(r.haloShader, r.hShellFrac, []float32{s.frac}, rl.ShaderUniformFloat)
 		for k, mats := range r.cylBatches {
 			if len(mats) > 0 {
 				r.drawHaloBatch(r.cylinder, k, mats)
-			}
-		}
-		for k, mats := range r.sphBatches {
-			if len(mats) > 0 {
-				r.drawHaloBatch(r.sphere, k, mats)
 			}
 		}
 	}
@@ -392,48 +376,57 @@ func (r *yarnRenderer) unload() {
 	rl.UnloadMesh(&r.cylinder)
 	rl.UnloadMesh(&r.sphere)
 	if r.lit {
+		rl.UnloadTexture(r.noiseTex)
 		rl.UnloadShader(r.shader)
 		rl.UnloadShader(r.haloShader)
 	}
 }
 
 // cylinderTransform maps the unit cylinder (radius 1, base at the origin,
-// extending up +Y by 1) so it spans a→b with the given radius.
+// extending up +Y by 1) so it spans a→b with the given radius. The matrix is
+// built directly from the direction vector — its columns are the world images
+// of the local X/Y/Z axes — which avoids the acos + rotation-matrix cost of
+// composing MatrixRotate/MatrixMultiply for thousands of segments per frame.
 func cylinderTransform(a, b rl.Vector3, radius float32) rl.Matrix {
-	dir := rl.Vector3Subtract(b, a)
-	length := float32(math.Sqrt(float64(dir.X*dir.X + dir.Y*dir.Y + dir.Z*dir.Z)))
+	yx, yy, yz := b.X-a.X, b.Y-a.Y, b.Z-a.Z // local +Y → dir*length
+	length := float32(math.Sqrt(float64(yx*yx + yy*yy + yz*yz)))
 	if length < 1e-6 {
 		length = 1e-6
 	}
-	scale := rl.MatrixScale(radius, length, radius)
-	rot := alignYTo(dir, length)
-	trans := rl.MatrixTranslate(a.X, a.Y, a.Z)
-	return rl.MatrixMultiply(rl.MatrixMultiply(scale, rot), trans)
+	inv := 1 / length
+	ux, uy, uz := yx*inv, yy*inv, yz*inv // unit direction
+
+	// Reference axis not parallel to the direction.
+	var rx, ry, rz float32 = 0, 1, 0
+	if uy > 0.99 || uy < -0.99 {
+		rx, ry, rz = 1, 0, 0
+	}
+	// local +X → unit(ref × dir), scaled by radius.
+	cx, cy, cz := ry*uz-rz*uy, rz*ux-rx*uz, rx*uy-ry*ux
+	cl := float32(math.Sqrt(float64(cx*cx + cy*cy + cz*cz)))
+	if cl < 1e-6 {
+		cl = 1
+	}
+	xhx, xhy, xhz := cx/cl, cy/cl, cz/cl
+	// local +Z → dir × X (already unit), scaled by radius.
+	zhx, zhy, zhz := uy*xhz-uz*xhy, uz*xhx-ux*xhz, ux*xhy-uy*xhx
+
+	return rl.Matrix{
+		M0: xhx * radius, M4: yx, M8: zhx * radius, M12: a.X,
+		M1: xhy * radius, M5: yy, M9: zhy * radius, M13: a.Y,
+		M2: xhz * radius, M6: yz, M10: zhz * radius, M14: a.Z,
+		M3: 0, M7: 0, M11: 0, M15: 1,
+	}
 }
 
-// alignYTo returns a rotation that turns +Y onto the (length-known) direction.
-func alignYTo(dir rl.Vector3, length float32) rl.Matrix {
-	d := rl.NewVector3(dir.X/length, dir.Y/length, dir.Z/length)
-	axis := rl.Vector3CrossProduct(rl.NewVector3(0, 1, 0), d)
-	axisLen := float32(math.Sqrt(float64(axis.X*axis.X + axis.Y*axis.Y + axis.Z*axis.Z)))
-	if axisLen < 1e-6 {
-		if d.Y >= 0 {
-			return rl.MatrixScale(1, 1, 1) // identity
-		}
-		return rl.MatrixRotate(rl.NewVector3(1, 0, 0), math.Pi)
+// sphereTransform is a plain uniform scale + translation.
+func sphereTransform(pos rl.Vector3, radius float32) rl.Matrix {
+	return rl.Matrix{
+		M0: radius, M4: 0, M8: 0, M12: pos.X,
+		M1: 0, M5: radius, M9: 0, M13: pos.Y,
+		M2: 0, M6: 0, M10: radius, M14: pos.Z,
+		M3: 0, M7: 0, M11: 0, M15: 1,
 	}
-	angle := float32(math.Acos(clampf(float64(d.Y), -1, 1)))
-	return rl.MatrixRotate(rl.Vector3Normalize(axis), angle)
-}
-
-func clampf(x, lo, hi float64) float64 {
-	if x < lo {
-		return lo
-	}
-	if x > hi {
-		return hi
-	}
-	return x
 }
 
 func toRL(c yarn.Color) rl.Color { return rl.NewColor(c.R, c.G, c.B, c.A) }

@@ -51,10 +51,12 @@ worthwhile steps.
 ## Rendering
 
 - **GPU shader lighting.** ✅ Done — a matte fabric shader (wrapped diffuse, dim
-  broad sheen, procedural helical **ply** relief and noise micro-roughness) plus
-  a **shell-fur fibre halo** for a fuzzy silhouette (see `engine/yarnshader.go`).
-  Follow-ups: multiple lights, shadow mapping, and baking the ply/fuzz into a
-  tiling normal texture to cut the per-fragment noise cost.
+  broad sheen, helical **ply** relief and micro-roughness) plus a **shell-fur
+  fibre halo** for a fuzzy silhouette. The fuzz noise is **baked into a tiling
+  texture** and the instance matrices are built directly from the direction
+  vector (no per-frame `acos`/rotation compose), which roughly doubled the
+  software-render framerate (see `engine/yarnshader.go`). Follow-ups: multiple
+  lights, shadow mapping, and frustum culling of off-screen stitches.
 - **Batching & LOD.** ✅ Instanced draws grouped by colour, plus per-stitch
   level of detail (full V → straight V → single bar by apparent size). Follow-up:
   a baked per-fabric mesh with vertex colours for a true single draw call, and

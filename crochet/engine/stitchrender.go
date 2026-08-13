@@ -123,7 +123,7 @@ func (e *Engine) drawStitchV(p, u, col, n rl.Vector3, c *pattern.StitchCell, rad
 // arc draws a yarn strand from a to b, bowed by `bulge` at its midpoint, as a
 // short chain of lit cylinders with a rounded tip.
 func (e *Engine) arc(a, b, bulge rl.Vector3, rad float32, col yarn.Color) {
-	const steps = 4
+	const steps = 3
 	ctrl := rl.Vector3Add(rl.Vector3Scale(rl.Vector3Add(a, b), 0.5), bulge)
 	prev := a
 	for i := 1; i <= steps; i++ {

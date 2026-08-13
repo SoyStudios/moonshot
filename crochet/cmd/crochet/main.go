@@ -21,6 +21,7 @@ import (
 func main() {
 	cfg := engine.DefaultConfig()
 	cfg.Title = "Crochet Engine — yarn physics"
+	cfg.Fuzz = envInt("CROCHET_FUZZ", 1) != 0
 
 	builders := []func() *engine.Scene{
 		hangingSwatch,

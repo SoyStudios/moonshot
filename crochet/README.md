@@ -108,11 +108,13 @@ fabric sheen plus a faint grazing rim, never a tight hot spot — the material
 **sheen** uniform scales it, so matte wool and glossy silk still differ. On top
 of that the surface is roughened two ways: a helical **ply** pattern (from each
 fragment's angle around the tube and distance along it) carves twisted-strand
-ridges and grooves, and fine coherent **noise jitters the normal** for a fuzzy,
-light-scattering micro-surface. Around all of it sits a **fibre halo**: the
-geometry is re-drawn as a couple of translucent shells pushed out along the
-normal, with a noise mask that keeps fewer fragments the further out it goes, so
-sparse fibre tips fuzz the silhouette like real wool (toggle with `F`). Stitches
+ridges and grooves, and a **baked noise texture** (generated once and sampled by
+UV, with a per-instance offset so it doesn't visibly tile) jitters the normal
+for a fuzzy, light-scattering micro-surface. Around all of it sits a **fibre
+halo**: the cylinders are re-drawn as a couple of translucent shells pushed out
+along the normal, with the same noise masking fewer fragments the further out it
+goes, so sparse fibre tips fuzz the silhouette like real wool (toggle with `F`,
+or start with `CROCHET_FUZZ=0` for a cheaper draw). Stitches
 carry a **stripe** palette for self-striping colourwork. (If the shader can't
 compile on a limited driver, the renderer falls back to flat cylinders so the
 demo still runs.)
