@@ -1,3 +1,9 @@
 # Godot 4+ specific ignores
 .godot/
 .DS_Store
+
+# Crochet engine build artifacts
+/crochet/cmd/crochet/crochet
+crochet-bin
+# Screenshots produced by the demo's CROCHET_SHOT preview mode
+/scene*.png
