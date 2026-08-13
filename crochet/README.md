@@ -88,10 +88,13 @@ Position Based Dynamics**:
   sealed amigurumi inflates to a plump equilibrium.
 
 The renderer draws each yarn segment as a cylinder with rounded joints, and the
-inter-row bonds as thin posts, so rows read as continuous crochet. Segments are
-shaded on the CPU with a directional light plus a material **sheen**, so matte
-wool and glossy silk look different, and strands can carry a **stripe** palette
-for self-striping colourwork.
+inter-row bonds as thin posts, so rows read as continuous crochet. Lighting runs
+on the **GPU**: unit cylinder/sphere meshes are drawn through a GLSL material
+that does per-fragment diffuse + specular shading, with the material **sheen**
+as a uniform, so matte wool and glossy silk look different. Strands can carry a
+**stripe** palette for self-striping colourwork. (If the shader can't compile on
+a limited driver, the renderer falls back to flat cylinders so the demo still
+runs.)
 
 ## How a crochet piece is built
 

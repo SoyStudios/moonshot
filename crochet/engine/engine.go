@@ -13,6 +13,7 @@ import (
 	"github.com/SoyStudios/moonshot/crochet/math3"
 	"github.com/SoyStudios/moonshot/crochet/pattern"
 	"github.com/SoyStudios/moonshot/crochet/physics"
+	"github.com/SoyStudios/moonshot/crochet/yarn"
 )
 
 // Scene bundles a physics world with the crochet fabrics rendered from it.
@@ -57,8 +58,9 @@ type Engine struct {
 	sceneIdx int
 	scene    *Scene
 
-	cam   rl.Camera3D
-	orbit orbitCam
+	cam      rl.Camera3D
+	orbit    orbitCam
+	renderer *yarnRenderer
 
 	paused    bool
 	showLinks bool
@@ -113,6 +115,9 @@ func (e *Engine) Run() {
 		Projection: rl.CameraPerspective,
 	}
 	e.orbit.apply(&e.cam)
+
+	e.renderer = newYarnRenderer()
+	defer e.renderer.unload()
 
 	frame := 0
 	for !rl.WindowShouldClose() {
@@ -183,6 +188,7 @@ func (e *Engine) draw() {
 
 	rl.BeginMode3D(e.cam)
 	rl.DrawGrid(24, 1)
+	e.renderer.beginFrame(e.cam.Position)
 	for _, f := range e.scene.Fabrics {
 		e.drawFabric(f)
 	}
@@ -194,42 +200,42 @@ func (e *Engine) draw() {
 
 func (e *Engine) drawFabric(f *pattern.Fabric) {
 	w := f.World
-	cam := e.orbit.position()
-	radius := float32(f.Radius)
+	r := e.renderer
 
-	// Thick yarn paths, drawn as a chain of cylinders with rounded joints so
-	// rows read as continuous yarn. Each segment is CPU-shaded and may carry a
-	// stripe colour.
+	// Thick yarn paths, drawn as a chain of GPU-lit cylinders with rounded
+	// joints so rows read as continuous yarn. Each segment may carry a stripe
+	// colour; the strand's material sets the sheen.
 	for _, s := range f.Strands {
-		r := float32(s.Radius)
+		r.setMaterial(s.Material)
+		rad := float32(s.Radius)
 		for i, seg := range s.Segments() {
-			pa := w.Particles[seg[0]].Pos
-			pb := w.Particles[seg[1]].Pos
-			col := shadeSegment(s.SegColor(i), s.Material, pa, pb, cam)
-			rl.DrawCylinderEx(v(pa), v(pb), r, r, 8, col)
+			a := v(w.Particles[seg[0]].Pos)
+			b := v(w.Particles[seg[1]].Pos)
+			r.segment(a, b, rad, s.SegColor(i))
 		}
 		if e.showNodes {
 			for i, n := range s.Nodes {
-				col := shadePoint(s.SegColor(i), s.Material)
-				rl.DrawSphere(v(w.Particles[n].Pos), r, col)
+				r.node(v(w.Particles[n].Pos), rad, s.SegColor(i))
 			}
 		}
 	}
 
 	// Thin structural cross-links between rows.
 	if e.showLinks {
-		lc := shadePoint(darker(f.Color, 0.6), f.Material)
-		lr := radius * 0.4
+		r.setMaterial(f.Material)
+		lc := darker(f.Color, 0.6)
+		lr := float32(f.Radius) * 0.4
 		for _, l := range f.Links {
 			a := v(w.Particles[l[0]].Pos)
 			b := v(w.Particles[l[1]].Pos)
-			rl.DrawCylinderEx(a, b, lr, lr, 6, lc)
+			r.segment(a, b, lr, lc)
 		}
 	}
 
 	// Highlight pinned nodes.
+	r.setMaterial(yarn.Material{Sheen: 0.2, Ambient: 0.5})
 	for _, p := range f.Pins {
-		rl.DrawSphere(v(w.Particles[p].Pos), radius*1.6, rl.NewColor(240, 220, 90, 255))
+		r.node(v(w.Particles[p].Pos), float32(f.Radius)*1.6, yarn.Color{R: 240, G: 220, B: 90, A: 255})
 	}
 }
 
