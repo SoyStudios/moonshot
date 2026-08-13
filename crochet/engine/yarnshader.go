@@ -26,6 +26,9 @@ import (
 // If the shader fails to compile (rare, on a limited driver) the renderer falls
 // back to raylib's flat immediate-mode cylinders so the demo still runs.
 
+// The vertex shader also derives, per fragment, where on the tube the fragment
+// sits: the angle around it and the distance along it. Those feed a helical
+// "ply" phase so the fragment shader can carve the twisted-fibre look of yarn.
 const yarnVertexShader = `
 #version 330
 layout(location = 0) in vec3 vertexPosition;
@@ -34,11 +37,30 @@ layout(location = 6) in mat4 instanceTransform;
 uniform mat4 mvp;
 out vec3 fragPosition;
 out vec3 fragNormal;
+out vec3 fragTangent;
+out float fragPhase;
+
+const float PLIES = 3.0;  // visible twisted strands around the yarn
+const float TWIST = 5.5;  // how fast the plies spiral along the length
+
 void main() {
+    mat3 m3 = mat3(instanceTransform);
     vec4 world = instanceTransform*vec4(vertexPosition, 1.0);
     fragPosition = world.xyz;
-    mat3 nm = mat3(transpose(inverse(instanceTransform)));
-    fragNormal = normalize(nm*vertexNormal);
+    fragNormal = normalize(transpose(inverse(m3))*vertexNormal);
+
+    // Around-tube tangent (object space) carried to world space.
+    vec3 tanObj = normalize(vec3(-vertexPosition.z, 0.0, vertexPosition.x));
+    fragTangent = normalize(m3*tanObj);
+
+    // Helical ply phase: angle around the tube + twist along its length,
+    // measured in radius units so the twist looks the same at any thickness.
+    float radius = length(instanceTransform[0].xyz);
+    float segLen = length(instanceTransform[1].xyz);
+    float along = vertexPosition.y*segLen;
+    float ang = atan(vertexPosition.z, vertexPosition.x);
+    fragPhase = ang*PLIES + (along/max(radius, 1e-4))*TWIST;
+
     gl_Position = mvp*world;
 }
 `
@@ -47,6 +69,8 @@ const yarnFragmentShader = `
 #version 330
 in vec3 fragPosition;
 in vec3 fragNormal;
+in vec3 fragTangent;
+in float fragPhase;
 uniform vec4 colDiffuse;   // per-group yarn colour (raylib sets from material)
 uniform vec3 lightDir;     // direction toward the key light (normalized)
 uniform vec3 lightColor;
@@ -54,14 +78,22 @@ uniform float ambient;     // base brightness in shadow
 uniform float sheen;       // specular strength (matte 0 .. glossy 1)
 uniform vec3 viewPos;
 out vec4 finalColor;
+
 void main() {
-    vec3 N = normalize(fragNormal);
+    // Fake the plied-fibre relief: perturb the normal across the tube so the
+    // light catches the ridges, and darken the grooves between plies.
+    float g = sin(fragPhase);
+    float gc = cos(fragPhase);
+    vec3 N = normalize(fragNormal + fragTangent*(gc*0.40));
+
     vec3 L = normalize(lightDir);
     float diff = max(dot(N, L), 0.0);
     vec3 V = normalize(viewPos - fragPosition);
     vec3 H = normalize(L + V);
-    float spec = pow(max(dot(N, H), 0.0), 24.0)*sheen;
-    vec3 lit = colDiffuse.rgb*(ambient + (1.0 - ambient)*diff) + spec*lightColor;
+    float spec = pow(max(dot(N, H), 0.0), 20.0)*sheen*(0.5 + 0.5*gc);
+
+    float ao = 0.78 + 0.22*(0.5 + 0.5*g);   // groove shadowing between plies
+    vec3 lit = colDiffuse.rgb*(ambient + (1.0 - ambient)*diff)*ao + spec*lightColor;
     finalColor = vec4(lit, colDiffuse.a);
 }
 `
@@ -94,8 +126,8 @@ type yarnRenderer struct {
 // newYarnRenderer builds the GPU resources. Must be called after InitWindow.
 func newYarnRenderer() *yarnRenderer {
 	r := &yarnRenderer{
-		cylinder:   rl.GenMeshCylinder(1, 1, 8),
-		sphere:     rl.GenMeshSphere(1, 6, 10),
+		cylinder:   rl.GenMeshCylinder(1, 1, 12),
+		sphere:     rl.GenMeshSphere(1, 8, 12),
 		cylBatches: map[batchKey][]rl.Matrix{},
 		sphBatches: map[batchKey][]rl.Matrix{},
 	}

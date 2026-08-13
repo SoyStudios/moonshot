@@ -90,19 +90,25 @@ Position Based Dynamics**:
 
 By default the renderer draws **faked stitch geometry**: each stitch becomes a
 small bowed "V" — the shape a knit/crochet stitch's top loops make — sized from
-the stitch gauge and oriented by the *live* fabric surface (its neighbours give
-the row and column directions; their cross product is the outward normal the V
-bows along). Rows of these Vs interlock into recognisable stockinette-like
-fabric that deforms with the simulation. It's purely cosmetic — the physics
-still sees one particle per stitch. Press `M` to switch to the **wire view**,
-which shows the raw yarn paths and structural links instead.
+the stitch gauge and oriented by the *live* fabric surface. On a flat piece the
+neighbours give the frame directly (row × column → normal); on a piece worked in
+the round the neighbour cross product jitters, so the normal is taken from the
+smooth outward direction instead (point − centroid for a ball, the same with the
+vertical axis removed for a tube) and the row/column axes are rebuilt orthogonal
+to it — which keeps stitches on curved surfaces tidy. Rows of these Vs interlock
+into recognisable fabric that deforms with the simulation. It's purely cosmetic
+— the physics still sees one particle per stitch. Press `M` to switch to the
+**wire view**, which shows the raw yarn paths and structural links.
 
 Lighting runs on the **GPU**: unit cylinder/sphere meshes are drawn through a
 GLSL material that does per-fragment diffuse + specular shading, with the
 material **sheen** as a uniform, so matte wool and glossy silk look different.
-Stitches carry a **stripe** palette for self-striping colourwork. (If the shader
-can't compile on a limited driver, the renderer falls back to flat cylinders so
-the demo still runs.)
+The shader also fakes **twisted-fibre yarn**: from each fragment's angle around
+the tube and distance along it, a helical "ply" pattern perturbs the normal
+(catching the light on the ridges) and shadows the grooves between plies, so the
+yarn looks spun rather than moulded. Stitches carry a **stripe** palette for
+self-striping colourwork. (If the shader can't compile on a limited driver, the
+renderer falls back to flat cylinders so the demo still runs.)
 
 Drawing is **instanced and batched**: every cylinder/sphere is accumulated as a
 per-instance transform, grouped by colour+material, and each group is issued as

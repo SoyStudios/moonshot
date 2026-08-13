@@ -119,18 +119,18 @@ func stuffedBall() *engine.Scene {
 	w.Ground = true
 	w.GroundY = 0
 	w.SelfCollision = true
-	w.CollisionRadius = 0.16
+	w.CollisionRadius = 0.12
 
 	f := pattern.Revolve(w, pattern.RevolveConfig{
-		Counts:      pattern.SphereCounts(6, 6), // 6,12,…,36,…,12,6
+		Counts:      pattern.SphereCounts(9, 6), // finer: 6,12,…,54,…,12,6
 		Stitch:      pattern.Single,
-		Gauge:       0.55,
+		Gauge:       0.38,
 		Center:      math3.V(0, 3.2, 0),
 		CloseBottom: true,
 		CloseTop:    true,
 		Yarn:        wool(230, 120, 140),
 	})
-	f.Stuff(0.006) // internal stuffing pressure
+	f.Stuff(0.004) // internal stuffing pressure
 
 	return &engine.Scene{Name: "Stuffed amigurumi ball (pressure + self-collision)", World: w, Fabrics: []*pattern.Fabric{f}}
 }
@@ -169,7 +169,7 @@ func materialShowcase() *engine.Scene {
 
 	mk := func(originX float64, y yarn.Config) *pattern.Fabric {
 		return pattern.Swatch(w, pattern.SwatchConfig{
-			Rows:   14, Cols: 12,
+			Rows: 14, Cols: 12,
 			Origin: math3.V(originX, 9, 0),
 			U:      math3.V(0.5, 0, 0),
 			V:      math3.V(0, -0.5, 0),

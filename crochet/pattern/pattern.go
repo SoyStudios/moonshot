@@ -49,6 +49,15 @@ type Fabric struct {
 	Radius   float64        // yarn radius (used to render Links)
 	Color    yarn.Color
 	Material yarn.Material
+
+	// Radial / Cylindrical mark closed shapes worked in the round so the
+	// renderer can orient each stitch from the smooth outward surface normal
+	// instead of a noisy neighbour cross product. Radial (a ball) uses the full
+	// point−centroid direction; Cylindrical (a tube) removes the vertical axis
+	// so the normal points straight out from the side. Flat pieces leave both
+	// false and use the neighbour frame.
+	Radial      bool
+	Cylindrical bool
 }
 
 // newFabric starts a fabric from a yarn config.
@@ -180,6 +189,7 @@ func Tube(w *physics.World, cfg TubeConfig) *Fabric {
 		cfg.Stitches = 3
 	}
 	f := newFabric(w, cfg.Yarn)
+	f.Cylindrical = true
 
 	grid := make([][]int, cfg.Rounds)
 	twist := 2 * math.Pi / float64(cfg.Stitches)
@@ -294,6 +304,7 @@ type RevolveConfig struct {
 // sealed shape.
 func Revolve(w *physics.World, cfg RevolveConfig) *Fabric {
 	f := newFabric(w, cfg.Yarn)
+	f.Radial = true
 	if len(cfg.Counts) == 0 {
 		return f
 	}
@@ -324,12 +335,13 @@ func Revolve(w *physics.World, cfg RevolveConfig) *Fabric {
 	}
 
 	rings := make([][]int, nr)
-	twist := width / (2 * math.Pi) // slight spiral per round
 	for r := 0; r < nr; r++ {
 		n := cfg.Counts[r]
 		rings[r] = make([]int, n)
 		for i := 0; i < n; i++ {
-			a := 2*math.Pi*float64(i)/float64(n) + twist*float64(r)
+			// No per-round spiral offset: keeping rounds phase-aligned lets the
+			// rendered stitches form clean vertical columns on the surface.
+			a := 2 * math.Pi * float64(i) / float64(n)
 			pos := cfg.Center.Add(math3.V(
 				radius[r]*math.Cos(a),
 				y[r],
