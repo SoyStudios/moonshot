@@ -131,6 +131,78 @@ void main() {
 }
 `
 
+// The halo shader draws "shell fur": the yarn geometry re-drawn a few times,
+// each shell pushed out along the normal, with a noise mask that keeps fewer
+// fragments the further out it goes — so sparse fibre tips stick out around the
+// silhouette and fuzz the surface.
+const haloVertexShader = `
+#version 330
+layout(location = 0) in vec3 vertexPosition;
+layout(location = 2) in vec3 vertexNormal;
+layout(location = 6) in mat4 instanceTransform;
+uniform mat4 mvp;
+uniform float shellOffset;   // push out along the normal (object units)
+uniform float shellFrac;     // 0..1 how far out this shell is
+out vec3 fragBase;           // un-expanded world pos, for stable fibre noise
+out vec3 fragNormal;
+out vec3 fragPosition;
+out float vFrac;
+void main() {
+    mat3 m3 = mat3(instanceTransform);
+    vec3 posExp = vertexPosition + vertexNormal*shellOffset;
+    vec4 world = instanceTransform*vec4(posExp, 1.0);
+    fragBase = (instanceTransform*vec4(vertexPosition, 1.0)).xyz;
+    fragNormal = normalize(transpose(inverse(m3))*vertexNormal);
+    fragPosition = world.xyz;
+    vFrac = shellFrac;
+    gl_Position = mvp*world;
+}
+`
+
+const haloFragmentShader = `
+#version 330
+in vec3 fragBase;
+in vec3 fragNormal;
+in vec3 fragPosition;
+in float vFrac;
+uniform vec4 colDiffuse;
+uniform vec3 lightDir;
+uniform float ambient;
+out vec4 finalColor;
+
+float hash(vec3 p) {
+    p = fract(p*vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y)*p.z);
+}
+float vnoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f*f*(3.0 - 2.0*f);
+    return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                   mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                   mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+
+void main() {
+    // A fibre reaches this shell only if its noise "length" clears the shell's
+    // height; the threshold rises outward so tips thin to a sparse fuzz.
+    float n = vnoise(fragBase*46.0);
+    if (n < 0.34 + vFrac*0.6) discard;
+
+    vec3 N = normalize(fragNormal);
+    vec3 L = normalize(lightDir);
+    float diff = clamp(dot(N, L)*0.5 + 0.5, 0.0, 1.0);
+    vec3 col = colDiffuse.rgb*(ambient + (1.0 - ambient)*diff)*1.15;
+    finalColor = vec4(col, (1.0 - vFrac)*0.55);
+}
+`
+
+// haloShell is one fur layer: how far out (object units) and its 0..1 fraction.
+type haloShell struct{ offset, frac float32 }
+
+var haloShells = []haloShell{{0.55, 0.5}, {1.3, 1.0}}
+
 // batchKey groups instances that can be drawn together: same colour and same
 // material response.
 type batchKey struct {
@@ -150,6 +222,15 @@ type yarnRenderer struct {
 	locAmbient    int32
 	locSheen      int32
 	locViewPos    int32
+
+	// Fuzzy-fibre halo (shell fur).
+	fuzz         bool
+	haloShader   rl.Shader
+	haloMaterial rl.Material
+	hLightDir    int32
+	hAmbient     int32
+	hShellOffset int32
+	hShellFrac   int32
 
 	curSheen, curAmbient float32
 	cylBatches           map[batchKey][]rl.Matrix
@@ -186,8 +267,24 @@ func newYarnRenderer() *yarnRenderer {
 	toLight := rl.Vector3Normalize(rl.NewVector3(0.45, 1.0, 0.35))
 	rl.SetShaderValue(r.shader, r.locLightDir, []float32{toLight.X, toLight.Y, toLight.Z}, rl.ShaderUniformVec3)
 	rl.SetShaderValue(r.shader, r.locLightColor, []float32{1.0, 0.98, 0.94}, rl.ShaderUniformVec3)
+
+	// Fuzzy-fibre halo shader.
+	r.fuzz = true
+	r.haloShader = rl.LoadShaderFromMemory(haloVertexShader, haloFragmentShader)
+	r.hLightDir = rl.GetShaderLocation(r.haloShader, "lightDir")
+	r.hAmbient = rl.GetShaderLocation(r.haloShader, "ambient")
+	r.hShellOffset = rl.GetShaderLocation(r.haloShader, "shellOffset")
+	r.hShellFrac = rl.GetShaderLocation(r.haloShader, "shellFrac")
+	hlocs := unsafe.Slice(r.haloShader.Locs, 32)
+	hlocs[rl.ShaderLocMatrixModel] = rl.GetShaderLocationAttrib(r.haloShader, "instanceTransform")
+	r.haloMaterial = rl.LoadMaterialDefault()
+	r.haloMaterial.Shader = r.haloShader
+	rl.SetShaderValue(r.haloShader, r.hLightDir, []float32{toLight.X, toLight.Y, toLight.Z}, rl.ShaderUniformVec3)
 	return r
 }
+
+// toggleFuzz turns the fibre halo on or off.
+func (r *yarnRenderer) toggleFuzz() { r.fuzz = !r.fuzz }
 
 // beginFrame updates the view position and resets the per-frame batches.
 func (r *yarnRenderer) beginFrame(camPos rl.Vector3) {
@@ -233,7 +330,8 @@ func (r *yarnRenderer) node(pos rl.Vector3, radius float32, col yarn.Color) {
 	r.sphBatches[k] = append(r.sphBatches[k], tf)
 }
 
-// flush draws all queued geometry as a handful of instanced draw calls.
+// flush draws all queued geometry as a handful of instanced draw calls,
+// followed by the translucent fibre-halo shells.
 func (r *yarnRenderer) flush() {
 	if !r.lit {
 		return
@@ -248,6 +346,9 @@ func (r *yarnRenderer) flush() {
 			r.drawBatch(r.sphere, k, mats)
 		}
 	}
+	if r.fuzz {
+		r.drawHalo()
+	}
 }
 
 func (r *yarnRenderer) drawBatch(mesh rl.Mesh, k batchKey, mats []rl.Matrix) {
@@ -257,11 +358,42 @@ func (r *yarnRenderer) drawBatch(mesh rl.Mesh, k batchKey, mats []rl.Matrix) {
 	rl.DrawMeshInstanced(mesh, r.material, mats, len(mats))
 }
 
+// drawHalo re-draws the batched geometry as a few expanding, translucent shells
+// so a fuzzy fibre halo forms around the yarn. Depth writes are disabled so the
+// shells blend instead of occluding each other.
+func (r *yarnRenderer) drawHalo() {
+	rl.BeginBlendMode(rl.BlendAlpha)
+	rl.DisableDepthMask()
+	for _, s := range haloShells {
+		rl.SetShaderValue(r.haloShader, r.hShellOffset, []float32{s.offset}, rl.ShaderUniformFloat)
+		rl.SetShaderValue(r.haloShader, r.hShellFrac, []float32{s.frac}, rl.ShaderUniformFloat)
+		for k, mats := range r.cylBatches {
+			if len(mats) > 0 {
+				r.drawHaloBatch(r.cylinder, k, mats)
+			}
+		}
+		for k, mats := range r.sphBatches {
+			if len(mats) > 0 {
+				r.drawHaloBatch(r.sphere, k, mats)
+			}
+		}
+	}
+	rl.EnableDepthMask()
+	rl.EndBlendMode()
+}
+
+func (r *yarnRenderer) drawHaloBatch(mesh rl.Mesh, k batchKey, mats []rl.Matrix) {
+	rl.SetShaderValue(r.haloShader, r.hAmbient, []float32{k.ambient}, rl.ShaderUniformFloat)
+	r.haloMaterial.GetMap(rl.MapDiffuse).Color = toRL(k.col)
+	rl.DrawMeshInstanced(mesh, r.haloMaterial, mats, len(mats))
+}
+
 func (r *yarnRenderer) unload() {
 	rl.UnloadMesh(&r.cylinder)
 	rl.UnloadMesh(&r.sphere)
 	if r.lit {
 		rl.UnloadShader(r.shader)
+		rl.UnloadShader(r.haloShader)
 	}
 }
 

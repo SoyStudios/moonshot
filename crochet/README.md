@@ -38,6 +38,7 @@ A window opens with several crochet pieces you can cycle through:
 | `R` | reset current scene |
 | `W` (hold) | wind gust |
 | `M` | toggle stitch view / wire view |
+| `F` | toggle fuzzy fibre halo |
 | `L` | toggle structural cross-links |
 | `N` | toggle stitch nodes |
 
@@ -108,9 +109,13 @@ fabric sheen plus a faint grazing rim, never a tight hot spot — the material
 of that the surface is roughened two ways: a helical **ply** pattern (from each
 fragment's angle around the tube and distance along it) carves twisted-strand
 ridges and grooves, and fine coherent **noise jitters the normal** for a fuzzy,
-light-scattering micro-surface. Stitches carry a **stripe** palette for
-self-striping colourwork. (If the shader can't compile on a limited driver, the
-renderer falls back to flat cylinders so the demo still runs.)
+light-scattering micro-surface. Around all of it sits a **fibre halo**: the
+geometry is re-drawn as a couple of translucent shells pushed out along the
+normal, with a noise mask that keeps fewer fragments the further out it goes, so
+sparse fibre tips fuzz the silhouette like real wool (toggle with `F`). Stitches
+carry a **stripe** palette for self-striping colourwork. (If the shader can't
+compile on a limited driver, the renderer falls back to flat cylinders so the
+demo still runs.)
 
 Drawing is **instanced and batched**: every cylinder/sphere is accumulated as a
 per-instance transform, grouped by colour+material, and each group is issued as

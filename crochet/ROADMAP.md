@@ -50,11 +50,11 @@ worthwhile steps.
 
 ## Rendering
 
-- **GPU shader lighting.** ✅ Done — per-fragment diffuse + specular in a GLSL
-  material, plus a procedural helical **ply pattern** that perturbs the normal
-  and shadows the grooves for a twisted-fibre yarn look (see
-  `engine/yarnshader.go`). Follow-ups: multiple lights, shadow mapping, and a
-  fuzzy/fibre "halo" on the silhouette.
+- **GPU shader lighting.** ✅ Done — a matte fabric shader (wrapped diffuse, dim
+  broad sheen, procedural helical **ply** relief and noise micro-roughness) plus
+  a **shell-fur fibre halo** for a fuzzy silhouette (see `engine/yarnshader.go`).
+  Follow-ups: multiple lights, shadow mapping, and baking the ply/fuzz into a
+  tiling normal texture to cut the per-fragment noise cost.
 - **Batching & LOD.** ✅ Instanced draws grouped by colour, plus per-stitch
   level of detail (full V → straight V → single bar by apparent size). Follow-up:
   a baked per-fabric mesh with vertex colours for a true single draw call, and

@@ -165,6 +165,9 @@ func (e *Engine) handleInput() {
 	if rl.IsKeyPressed(rl.KeyM) {
 		e.stitchView = !e.stitchView
 	}
+	if rl.IsKeyPressed(rl.KeyF) {
+		e.renderer.toggleFuzz()
+	}
 	e.windOn = rl.IsKeyDown(rl.KeyW)
 
 	e.orbit.handleInput()
@@ -286,8 +289,8 @@ func (e *Engine) drawHUD() {
 	}
 	rl.DrawText(state, 12, 60, 18, rl.NewColor(240, 220, 90, 255))
 
-	help := "drag: orbit   wheel: zoom   right-drag: pan   [tab] next  " +
-		"[space] pause  [r] reset  [w] wind  [m] stitch/wire  [l] links  [n] nodes"
+	help := "drag: orbit   wheel: zoom   right-drag: pan   [tab] next  [space] pause  " +
+		"[r] reset  [w] wind  [m] stitch/wire  [f] fuzz  [l] links  [n] nodes"
 	rl.DrawText(help, 12, int32(e.cfg.Height)-26, 16, rl.Gray)
 	rl.DrawFPS(int32(e.cfg.Width)-90, 10)
 }
