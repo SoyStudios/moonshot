@@ -16,11 +16,13 @@ worthwhile steps.
   lean — not just row spacing and a drawn V. Ties into self-collision (posts are
   collidable) and makes textured stitch patterns (front/back post, cables)
   possible.
-- **Increase / decrease placement.** ✅ Partly — `pattern.Build` anchors every
+- **Increase / decrease topology.** ✅ Done — `pattern.Build` anchors every
   stitch to the specific stitch(es) it's worked into, so inc/dec topology is
-  correct and the round-by-round counts shape the silhouette. Still to do:
-  *positional* placement (increases clustered on one side) for asymmetric,
-  sculpted pieces — today each round is laid out as an even ring.
+  correct and the round-by-round counts shape the silhouette.
+- **Positional shaping.** Place increases/decreases at chosen positions within a
+  round (clustered on one side) and lay stitches out accordingly, instead of an
+  even ring — the missing piece for asymmetric, sculpted pieces (snouts, ears,
+  bent limbs).
 - **Stitch texture library.** Bobbles, popcorns, front/back loop only, clusters,
   shells — each as a small builder that emits nodes + bonds, composable into
   rows and rounds.
@@ -32,9 +34,13 @@ worthwhile steps.
 - **Written-pattern parser.** ✅ Done — `pattern.Parse` reads standard notation
   (`R1: 6 sc in magic ring`, `R2: inc x6`, `R3: (sc, inc) x6`, ranges, fill
   rounds, `sc2tog`) into a `Pattern`, and `pattern.Build` turns it into a
-  `Fabric`. Follow-ups: foundation-chain (flat) starts, colour changes and
-  loop-only (BLO/FLO) stitches in the notation, and round-level validation
-  (warn when a round's ops don't consume the round below).
+  `Fabric`.
+- **Foundation-chain (flat) starts.** Support patterns that begin with a
+  worked-back-and-forth foundation chain (`ch 20, turn, …`) rather than a magic
+  ring, so flat pieces and garments parse too.
+- **Notation extensions.** Colour changes mid-round and loop-only stitches
+  (BLO/FLO) in the parser, plus round-level validation that warns when a round's
+  ops don't consume the round below.
 - **Pattern DSL / builder API.** A fluent Go API (`p.Round().Sc(6).Inc(6)`) over
   the same `Op`/`Round` model the parser produces, for authoring in code.
 - **Gauge & yarn-weight presets.** Map real yarn weights (DK, worsted, aran) and
