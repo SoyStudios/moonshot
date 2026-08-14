@@ -2,6 +2,7 @@ package engine
 
 import (
 	"math"
+	"sort"
 	"unsafe"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -62,8 +63,11 @@ void main() {
     float ang = atan(vertexPosition.z, vertexPosition.x);
     fragPhase = ang*PLIES + (along/max(radius, 1e-4))*TWIST;
 
-    // Per-instance UV jitter so the baked noise doesn't obviously tile.
-    float off = fract(sin(dot(instanceTransform[3].xyz, vec3(12.9, 78.2, 37.7)))*43758.5);
+    // Per-instance UV jitter so the baked noise doesn't obviously tile. The
+    // seed is quantised to a coarse grid so tiny per-frame physics drift can't
+    // change it — otherwise the fibre pattern swims and flickers.
+    vec3 seed = floor(instanceTransform[3].xyz*4.0);
+    float off = fract(sin(dot(seed, vec3(12.9, 78.2, 37.7)))*43758.5);
     fragUV = vertexTexCoord + vec2(off, off*1.7);
 
     gl_Position = mvp*world;
@@ -145,7 +149,9 @@ void main() {
     fragNormal = normalize(transpose(inverse(m3))*vertexNormal);
     fragPosition = world.xyz;
     vFrac = shellFrac;
-    float off = fract(sin(dot(instanceTransform[3].xyz, vec3(12.9, 78.2, 37.7)))*43758.5);
+    // Quantised seed: stable under tiny physics jitter so the fuzz doesn't swim.
+    vec3 seed = floor(instanceTransform[3].xyz*4.0);
+    float off = fract(sin(dot(seed, vec3(12.9, 78.2, 37.7)))*43758.5);
     fragUV = vertexTexCoord + vec2(off, off*1.7);
     gl_Position = mvp*world;
 }
@@ -165,15 +171,20 @@ out vec4 finalColor;
 
 void main() {
     // A fibre reaches this shell only if its noise "length" clears the shell's
-    // height; the threshold rises outward so tips thin to a sparse fuzz.
+    // height; the threshold rises outward so tips thin to a sparse fuzz. A soft
+    // edge (rather than a hard discard) antialiases the thin fibres so they
+    // don't shimmer as the geometry moves sub-pixel.
     float n = texture(texture2, fragUV*vec2(4.0, 2.2)).r;
-    if (n < 0.34 + vFrac*0.6) discard;
+    float edge = 0.34 + vFrac*0.6;
+    float cover = smoothstep(edge - 0.05, edge + 0.10, n);
+    float a = cover*(1.0 - vFrac)*0.55;
+    if (a < 0.004) discard;
 
     vec3 N = normalize(fragNormal);
     vec3 L = normalize(lightDir);
     float diff = clamp(dot(N, L)*0.5 + 0.5, 0.0, 1.0);
     vec3 col = colDiffuse.rgb*(ambient + (1.0 - ambient)*diff)*1.15;
-    finalColor = vec4(col, (1.0 - vFrac)*0.55);
+    finalColor = vec4(col, a);
 }
 `
 
@@ -352,11 +363,15 @@ func (r *yarnRenderer) drawHalo() {
 	rl.DisableDepthMask()
 	// Only the cylinders get a halo — they form the yarn's silhouette. Skipping
 	// the joint spheres roughly halves the fill the shells cost, for no visible
-	// difference (the cylinder fuzz already covers the joints).
+	// difference (the cylinder fuzz already covers the joints). Iterate the
+	// colour batches in a stable order: Go map order is randomised each frame,
+	// which with alpha blending would flicker at colour boundaries.
+	keys := sortedBatchKeys(r.cylBatches)
 	for _, s := range haloShells {
 		rl.SetShaderValue(r.haloShader, r.hShellOffset, []float32{s.offset}, rl.ShaderUniformFloat)
 		rl.SetShaderValue(r.haloShader, r.hShellFrac, []float32{s.frac}, rl.ShaderUniformFloat)
-		for k, mats := range r.cylBatches {
+		for _, k := range keys {
+			mats := r.cylBatches[k]
 			if len(mats) > 0 {
 				r.drawHaloBatch(r.cylinder, k, mats)
 			}
@@ -364,6 +379,28 @@ func (r *yarnRenderer) drawHalo() {
 	}
 	rl.EnableDepthMask()
 	rl.EndBlendMode()
+}
+
+// sortedBatchKeys returns the batch keys in a deterministic order so alpha
+// blending is stable frame-to-frame.
+func sortedBatchKeys(m map[batchKey][]rl.Matrix) []batchKey {
+	keys := make([]batchKey, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		ak := uint32(a.col.R)<<24 | uint32(a.col.G)<<16 | uint32(a.col.B)<<8 | uint32(a.col.A)
+		bk := uint32(b.col.R)<<24 | uint32(b.col.G)<<16 | uint32(b.col.B)<<8 | uint32(b.col.A)
+		if ak != bk {
+			return ak < bk
+		}
+		if a.sheen != b.sheen {
+			return a.sheen < b.sheen
+		}
+		return a.ambient < b.ambient
+	})
+	return keys
 }
 
 func (r *yarnRenderer) drawHaloBatch(mesh rl.Mesh, k batchKey, mats []rl.Matrix) {
