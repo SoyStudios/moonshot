@@ -20,6 +20,13 @@ type World struct {
 	Gravity math3.Vec3 // acceleration applied to every free particle
 	Damping float64    // velocity retention per step in (0,1]; <1 bleeds energy
 
+	// RestThreshold lets particles "sleep": if a particle's implied per-step
+	// velocity falls below this, it is treated as zero so a nearly-still piece
+	// comes fully to rest instead of drifting. It MUST stay below gravity's
+	// per-step velocity (|Gravity|·dt²) or free fall would be cancelled every
+	// step; the default suits dt = 1/120. Set 0 to disable.
+	RestThreshold float64
+
 	// Iterations is the number of constraint relaxation passes per step. Higher
 	// values make yarn less stretchy at the cost of CPU.
 	Iterations int
@@ -43,11 +50,12 @@ type World struct {
 // NewWorld returns a world with sensible defaults for yarn simulation.
 func NewWorld() *World {
 	return &World{
-		Gravity:    math3.V(0, -9.81, 0),
-		Damping:    0.99,
-		Iterations: 12,
-		GroundY:    0,
-		Friction:   0.35,
+		Gravity:       math3.V(0, -9.81, 0),
+		Damping:       0.97,
+		RestThreshold: 0.0004, // < |g|·dt² at dt=1/120 (0.00068) so fall still works
+		Iterations:    12,
+		GroundY:       0,
+		Friction:      0.35,
 	}
 }
 
@@ -100,6 +108,7 @@ func (w *World) Step(dt float64) {
 
 func (w *World) integrate(dt float64) {
 	dt2 := dt * dt
+	rest2 := w.RestThreshold * w.RestThreshold
 	for _, p := range w.Particles {
 		if p.InvMass == 0 {
 			p.force = math3.Zero
@@ -107,6 +116,11 @@ func (w *World) integrate(dt float64) {
 		}
 		// Verlet: next = pos + (pos-prev)*damping + accel*dt^2
 		vel := p.Pos.Sub(p.Prev).Scale(w.Damping)
+		// Sleep: drop velocities too small to matter so constraint chatter
+		// doesn't keep the piece quivering forever.
+		if rest2 > 0 && vel.LenSq() < rest2 {
+			vel = math3.Zero
+		}
 		accel := w.Gravity.Add(p.force.Scale(p.InvMass))
 		next := p.Pos.Add(vel).Add(accel.Scale(dt2))
 		p.Prev = p.Pos

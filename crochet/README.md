@@ -80,7 +80,9 @@ Position Based Dynamics**:
 - The **world** integrates once, then relaxes all constraints and resolves
   collisions over several iterations — more iterations means stiffer, less
   stretchy yarn. A ground plane (with friction) and sphere colliders let fabric
-  drape over forms.
+  drape over forms. Velocity **damping** plus a small **rest threshold** (which
+  zeroes sub-threshold per-step velocity, kept below gravity's per-step pull so
+  free fall still works) let a piece come to rest instead of quivering.
 - **Self-collision** treats each particle as a small sphere and pushes
   overlapping, non-adjacent parts apart, so folded fabric doesn't pass through
   itself. A uniform spatial hash keeps it near-linear, and directly-linked

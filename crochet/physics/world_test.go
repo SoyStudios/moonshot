@@ -19,6 +19,42 @@ func TestGravityPullsParticleDown(t *testing.T) {
 	}
 }
 
+// The default rest threshold must not cancel gravity: a free particle at the
+// demo's dt still falls a meaningful distance (guards the sleep-vs-gravity bug).
+func TestRestThresholdDoesNotBreakFreeFall(t *testing.T) {
+	w := NewWorld() // default Damping/RestThreshold
+	i := w.Add(math3.V(0, 100, 0), 1)
+	for n := 0; n < 120; n++ { // 1 second at dt=1/120
+		w.Step(1.0 / 120)
+	}
+	if drop := 100 - w.Particles[i].Pos.Y; drop < 1.0 {
+		t.Fatalf("particle barely fell (drop=%.3f); rest threshold likely cancelling gravity", drop)
+	}
+}
+
+// A hanging strand must actually come to rest, not quiver forever.
+func TestHangingStrandComesToRest(t *testing.T) {
+	w := NewWorld()
+	top := w.Add(math3.V(0, 10, 0), 1)
+	w.Particles[top].Pin()
+	prev := top
+	for k := 0; k < 12; k++ {
+		n := w.Add(math3.V(0, 10-0.3*float64(k+1), 0), 1)
+		w.Link(prev, n, 1)
+		prev = n
+	}
+	for n := 0; n < 1200; n++ {
+		w.Step(1.0 / 120)
+	}
+	var speed float64
+	for _, p := range w.Particles {
+		speed += p.Velocity().Len()
+	}
+	if speed > 1e-4 {
+		t.Fatalf("strand did not settle: total speed %.6f", speed)
+	}
+}
+
 // A pinned particle must never move.
 func TestPinnedStaysPut(t *testing.T) {
 	w := NewWorld()
